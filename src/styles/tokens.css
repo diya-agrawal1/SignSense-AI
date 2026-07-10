@@ -1,0 +1,106 @@
+/*
+  SignSense AI — Design Tokens
+  A "vision lab" aesthetic: dark charcoal workspace so a bright webcam feed
+  and cyan skeleton-tracking overlays stay the visual focus, with a warm
+  amber accent reserved for learning progress/feedback (kept distinct from
+  the cool "machine is tracking you" cyan).
+*/
+
+:root {
+  /* Color: surfaces */
+  --color-bg: #0f1115;
+  --color-surface: #171a21;
+  --color-surface-raised: #1f232c;
+  --color-border: #2a2f3a;
+  --color-border-strong: #3a4152;
+
+  /* Color: text */
+  --color-text-primary: #e8eaed;
+  --color-text-secondary: #9aa1ac;
+  --color-text-muted: #6b7280;
+
+  /* Color: accents */
+  --color-accent-cyan: #4cc9f0;
+  --color-accent-cyan-dim: rgba(76, 201, 240, 0.16);
+  --color-accent-amber: #f2b84b;
+  --color-accent-amber-dim: rgba(242, 184, 75, 0.16);
+  --color-danger: #ef5b5b;
+  --color-danger-dim: rgba(239, 91, 91, 0.14);
+  --color-success: #5bd48f;
+
+  /* Typography */
+  --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+  --font-body: "Inter", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radius / elevation */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* Motion */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-cyan);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
