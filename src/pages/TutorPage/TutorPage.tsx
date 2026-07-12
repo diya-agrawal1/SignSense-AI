@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "../../components/Header";
 import { Sidebar } from "../../components/Sidebar";
 import { LessonPanel } from "../../components/LessonPanel";
@@ -7,7 +7,7 @@ import { Camera } from "../../components/Camera";
 import { SkeletonCanvas } from "../../components/SkeletonCanvas";
 import { useHandTracking } from "../../hooks/useHandTracking";
 import styles from "./TutorPage.module.css";
-
+import { LandmarkProcessor } from "../../services/LandmarkProcessor";
 /**
  * Main tutoring screen. Wires the reusable components together with
  * placeholder data — lesson content and AI feedback will be connected
