@@ -1,178 +1,107 @@
-# SignSense AI 🤟
+# 🤟 SignSense AI
 
-**An Offline AI Sign Language Tutor**
+> An offline AI tutor that helps users learn ASL fingerspelling through real-time recognition and corrective feedback.
 
-SignSense AI is a privacy-first web application that helps users learn American Sign Language (ASL) fingerspelling through real-time hand recognition and instant feedback. The entire application is designed to run **completely on-device**, ensuring that no camera frames or personal data leave the user's device.
+Most people learning sign language rely on static images or videos and have no reliable way to check whether they're forming signs correctly. Existing AI-powered solutions often depend on cloud processing, raising privacy concerns and requiring a stable internet connection.
 
-> **Current Development Status:** Stage 2 Complete (Project Setup + Camera Integration)
+**SignSense AI** provides a privacy-friendly alternative. Using only a device's camera, it recognizes ASL fingerspelling in real time, analyzes hand posture, and provides instant feedback—all entirely on-device, with no video ever leaving the user's browser.
 
----
+## 🎥 Demo
 
-## 📌 Project Vision
-
-Learning sign language often relies on static images or prerecorded videos, making it difficult for learners to know whether they are performing signs correctly.
-
-SignSense AI aims to solve this by providing:
-
-* Real-time sign recognition
-* Instant corrective feedback
-* Personalized practice sessions
-* 100% offline processing for privacy
+<p align="center">
+  <img src="demo.gif" alt="SignSense AI Demo" width="800"/>
+</p>
 
 ---
 
-## 🚀 Current Features
+## ✨ Features
 
-### ✅ Project Setup
-
-* React + Vite + TypeScript
-* Modular project architecture
-* Reusable component structure
-* Ready for AI integration
-
-### ✅ Camera Module
-
-* Live webcam access using `getUserMedia()`
-* Permission handling
-* Loading and error states
-* Responsive camera component
-* Foundation for real-time hand tracking
+* Real-time ASL fingerspelling recognition
+* On-device hand tracking using MediaPipe Hands
+* Lightweight local AI classifier
+* Instant corrective feedback for incorrect hand poses
+* Hand skeleton visualization
+* Confidence-based predictions
+* Fully offline inference
+* Privacy-first design with no cloud processing
 
 ---
 
-## 🛠 Tech Stack
+## 🧠 How It Works
 
-### Frontend
-
-* React
-* Vite
-* TypeScript
-
-### Browser APIs
-
-* `getUserMedia()`
-
-### Planned AI Stack
-
-* MediaPipe Hands
-* TensorFlow.js
-* HTML5 Canvas
-* LocalStorage
-
----
-
-## 📁 Project Structure
+The application processes webcam input locally and converts hand movements into sign predictions.
 
 ```text
-src/
-│
-├── components/
-│   ├── Camera/
-│   ├── Header/
-│   ├── Sidebar/
-│   ├── LessonPanel/
-│   ├── FeedbackPanel/
-│   └── SkeletonCanvas/
-│
-├── hooks/
-│
-├── models/
-│
-├── pages/
-│
-├── services/
-│
-├── utils/
-│
-└── App.tsx
+Camera Feed
+      ↓
+MediaPipe Hands
+      ↓
+21 Hand Landmarks
+      ↓
+Landmark Normalization
+      ↓
+Local AI Classifier
+      ↓
+Predicted Letter
+      ↓
+Pose Analysis
+      ↓
+Real-Time Feedback
 ```
+
+### Hand Tracking
+
+SignSense AI uses **MediaPipe Hands** to detect and track 21 hand landmarks in real time. These landmarks represent key joints and fingertip positions, providing a compact representation of the user's hand pose.
+
+### Letter Recognition
+
+The landmark coordinates are normalized and passed into a lightweight neural network running directly in the browser. The model predicts the most likely ASL letter and returns a confidence score.
+
+### Pose Analysis
+
+Beyond classification, the system analyzes finger positions, joint angles, and overall hand orientation to identify mistakes in the user's pose. This allows the application to provide meaningful feedback instead of simply marking a sign as incorrect.
 
 ---
 
-## ⚙️ Getting Started
+## 🔒 Privacy & On-Device AI
 
-### Clone the repository
+Every part of the recognition pipeline runs locally on the user's device.
 
-```bash
-git clone <repository-url>
-cd signsense-ai
-```
+* No video uploads
+* No cloud inference
+* No external processing
+* No internet connection required after loading the application
 
-### Install dependencies
-
-```bash
-npm install
-```
-
-### Start the development server
-
-```bash
-npm run dev
-```
-
-Open your browser and navigate to:
-
-```
-http://localhost:5173
-```
-
-Allow camera permissions when prompted.
+This ensures low latency, improved privacy, and uninterrupted usage.
 
 ---
 
-## 🗺 Development Roadmap
+## 🛠️ Tech Stack
 
-### ✅ Stage 1 — Project Setup
-
-* [x] React + Vite + TypeScript
-* [x] Folder architecture
-* [x] Reusable component structure
-
-### ✅ Stage 2 — Camera Integration
-
-* [x] Webcam access
-* [x] Permission handling
-* [x] Responsive camera view
-* [x] Error handling
-
-### ⏳ Upcoming Stages
-
-* [ ] MediaPipe Hands integration
-* [ ] Hand landmark extraction
-* [ ] Landmark normalization
-* [ ] ASL letter classification
-* [ ] Pose analysis
-* [ ] Finger-level corrective feedback
-* [ ] Skeleton overlay visualization
-* [ ] Progress tracking
-* [ ] Adaptive learning engine
-* [ ] Continuous fingerspelling recognition
+| Category         | Technology              |
+| ---------------- | ----------------------- |
+| Frontend         | React, Vite, TypeScript |
+| Computer Vision  | MediaPipe Hands         |
+| Machine Learning | TensorFlow.js           |
+| Visualization    | HTML5 Canvas            |
+| Storage          | LocalStorage            |
+| Deployment       | Vercel / Netlify        |
 
 ---
 
-## 🎯 Long-Term Goal
+## 🚀 Future Improvements
 
-SignSense AI will become a fully offline AI-powered sign language tutor capable of:
-
-* Detecting ASL fingerspelling in real time
-* Providing explainable finger-level feedback
-* Tracking user progress locally
-* Generating adaptive practice sessions
-* Preserving user privacy by keeping all inference on-device
-
----
-
-## 🔒 Privacy First
-
-SignSense AI is designed with privacy as a core principle.
-
-* Camera frames are processed locally.
-* No video is uploaded to any server.
-* No cloud-based inference.
-* No personal data leaves the user's device.
+* Adaptive learning based on user performance
+* Continuous word recognition
+* Progress tracking and analytics
+* Gamified learning challenges
+* Support for additional sign language datasets
+* Personalized lesson generation
 
 ---
 
 ## 👥 Team
 
-Developed as a hackathon project focused on building an intelligent, privacy-preserving, on-device AI learning experience for sign language education.
+Built for the **On-Device AI** track with a focus on accessibility, privacy, and real-time learning.
+
+If you're reading this and know sign language better than we do, we'd love your feedback 
