@@ -1,0 +1,163 @@
+import type { HandLandmarks, Handedness } from "../models/handTracking";
+import type {
+  ExtensionState,
+  FingerAnalysis,
+  FingerIssue,
+  FingerName,
+  PalmAnalysis,
+  PalmIssue,
+  PoseAnalysisResult,
+} from "../models/poseAnalysis";
+import { FINGER_NAMES } from "../models/poseAnalysis";
+import { ASL_ALPHABET_REFERENCE } from "../models/aslAlphabetReference";
+import { angleBetween, cross, mirrorHorizontally } from "../utils/handGeometry";
+
+/** Landmark indices per finger: [MCP, PIP, DIP, TIP]. Thumb has no DIP, so it reuses IP for both angle checks. */
+const FINGER_JOINTS: Record<FingerName, readonly [number, number, number, number]> = {
+  thumb: [1, 2, 3, 4], // CMC, MCP, IP, TIP
+  index: [5, 6, 7, 8],
+  middle: [9, 10, 11, 12],
+  ring: [13, 14, 15, 16],
+  pinky: [17, 18, 19, 20],
+};
+
+/** Joint-angle thresholds separating curled / halfCurled / extended, in degrees. Tune per finger if needed. */
+const EXTENDED_MIN_ANGLE = 155;
+const CURLED_MAX_ANGLE = 95;
+
+/** Below this angleDiff (degrees) from the expected bucket's edge, we don't bother flagging it — avoids nagging over near-misses. */
+const ANGLE_DIFF_TOLERANCE = 8;
+
+function classifyExtension(angle: number): ExtensionState {
+  if (angle >= EXTENDED_MIN_ANGLE) return "extended";
+  if (angle <= CURLED_MAX_ANGLE) return "curled";
+  return "halfCurled";
+}
+
+/** Midpoint of the angle range a given bucket occupies — used to compute a signed diff for ranking severity. */
+function bucketCenter(state: ExtensionState): number {
+  if (state === "extended") return 180;
+  if (state === "curled") return 0;
+  return (EXTENDED_MIN_ANGLE + CURLED_MAX_ANGLE) / 2;
+}
+
+function classifyFingerIssue(current: ExtensionState, expected: ExtensionState): FingerIssue {
+  const currentRank = { curled: 0, halfCurled: 1, extended: 2 }[current];
+  const expectedRank = { curled: 0, halfCurled: 1, extended: 2 }[expected];
+  if (currentRank > expectedRank) return "too_straight";
+  if (currentRank < expectedRank) return "too_bent";
+  return "partially_bent";
+}
+
+/**
+ * PoseAnalysisService
+ *
+ * Part A of the Stage 6 hybrid tutor: pure, deterministic geometry —
+ * no ML, no LLM. Compares live landmarks against a target letter's
+ * expected hand shape (ASL_ALPHABET_REFERENCE) and returns a structured
+ * breakdown of what's right and wrong, finger by finger.
+ *
+ * Deliberately independent of SignClassifierService/LandmarkProcessor:
+ * this operates on raw landmarks straight from HandTrackingService, not
+ * the normalized 63-value ML feature vector, since joint angles need the
+ * original per-point geometry.
+ */
+export class PoseAnalysisService {
+  /** Runs the full comparison against a target letter and returns Part A's structured result. */
+  static analyze(
+    landmarks: HandLandmarks,
+    handedness: Handedness | null,
+    targetLetter: string
+  ): PoseAnalysisResult {
+    const letter = targetLetter.toUpperCase();
+    const reference = ASL_ALPHABET_REFERENCE[letter];
+    if (!reference) {
+      throw new Error(`No ASL reference data for letter "${targetLetter}".`);
+    }
+
+    // Canonicalize handedness the same way LandmarkProcessor does, so the
+    // same reference table works regardless of which hand is signing.
+    const points = handedness === "Left" ? mirrorHorizontally(landmarks) : landmarks;
+
+    const fingers = {} as Record<FingerName, FingerAnalysis>;
+    for (const finger of FINGER_NAMES) {
+      fingers[finger] = PoseAnalysisService.analyzeFinger(points, finger, reference.fingers[finger]);
+    }
+
+    const palm = PoseAnalysisService.analyzePalm(points, reference.palmOrientation);
+
+    const isCorrect =
+      FINGER_NAMES.every((f) => fingers[f].status === "correct") && palm.status !== "incorrect";
+
+    return { letter, fingers, palm, isCorrect };
+  }
+
+  private static analyzeFinger(
+    landmarks: HandLandmarks,
+    finger: FingerName,
+    expected: ExtensionState
+  ): FingerAnalysis {
+    const [mcpIdx, pipIdx, dipIdx, tipIdx] = FINGER_JOINTS[finger];
+    const mcp = landmarks[mcpIdx];
+    const pip = landmarks[pipIdx];
+    const dip = landmarks[dipIdx];
+    const tip = landmarks[tipIdx];
+
+    // Average the two knuckle-flexion angles along the finger. For the
+    // thumb (no true DIP joint) this reuses IP for both, which still
+    // captures its one meaningful bend.
+    const angleAtPip = angleBetween(mcp, pip, dip);
+    const angleAtDip = angleBetween(pip, dip, tip);
+    const angle = (angleAtPip + angleAtDip) / 2;
+
+    const state = classifyExtension(angle);
+    const angleDiff = Math.round(Math.abs(angle - bucketCenter(expected)));
+
+    if (state === expected || angleDiff <= ANGLE_DIFF_TOLERANCE) {
+      return { state, angle: Math.round(angle), expected, status: "correct", angleDiff: 0 };
+    }
+
+    return {
+      state,
+      angle: Math.round(angle),
+      expected,
+      status: "incorrect",
+      issue: classifyFingerIssue(state, expected),
+      angleDiff,
+    };
+  }
+
+  /**
+   * Approximates which way the palm faces using the plane formed by the
+   * wrist and the index/pinky MCP knuckles. The cross product's z-component
+   * sign roughly tracks whether the palm plane tilts toward or away from
+   * the camera in MediaPipe's image-normalized coordinate space.
+   *
+   * This is a coarse heuristic (facingCamera vs. facingAway only) — see
+   * the LetterReference doc-comment for why sideways/downward letters
+   * leave palmOrientation unchecked rather than risk a confidently wrong
+   * heuristic there.
+   */
+  private static analyzePalm(landmarks: HandLandmarks, expected?: "facingCamera" | "facingAway"): PalmAnalysis {
+    if (!expected) {
+      return { orientation: "unknown", status: "not_checked" };
+    }
+
+    const wrist = landmarks[0];
+    const indexMcp = landmarks[5];
+    const pinkyMcp = landmarks[17];
+
+    const v1 = { x: indexMcp.x - wrist.x, y: indexMcp.y - wrist.y, z: indexMcp.z - wrist.z };
+    const v2 = { x: pinkyMcp.x - wrist.x, y: pinkyMcp.y - wrist.y, z: pinkyMcp.z - wrist.z };
+    const normal = cross(v1, v2);
+
+    const orientation: "facingCamera" | "facingAway" = normal.z > 0 ? "facingCamera" : "facingAway";
+
+    if (orientation === expected) {
+      return { orientation, status: "correct" };
+    }
+
+    const issue: PalmIssue = expected === "facingCamera" ? "flip_toward_camera" : "flip_away_from_camera";
+    return { orientation, status: "incorrect", issue };
+  }
+}
