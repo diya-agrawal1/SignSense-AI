@@ -52,7 +52,7 @@ export function TutorPage() {
   const [targetLetter, setTargetLetter] = useState("A");
   const { landmarks, fps, handedness } = useHandTracking(video);
   const { letter, confidence, isModelReady } = useSignClassifier(landmarks, handedness);
-  const { analysis, message, isPhrasingLoading, isLLMAvailable } = usePoseFeedback(
+  const { analysis, structuredFeedback, message, isPhrasingLoading, isLLMAvailable } = usePoseFeedback(
     landmarks,
     handedness,
     targetLetter
@@ -92,6 +92,7 @@ export function TutorPage() {
           <FeedbackPanel
             feedback={{ status: analysis ? "evaluating" : "idle", message: detectionCaption }}
             poseAnalysis={analysis}
+            structuredFeedback={structuredFeedback}
             phrasedMessage={message}
             isPhrasingLoading={isPhrasingLoading}
           />

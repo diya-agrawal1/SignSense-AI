@@ -43,3 +43,16 @@ export function cross(
     z: v1.x * v2.y - v1.y * v2.x,
   };
 }
+
+/**
+ * Signed angle (degrees) of a 2D vector from "straight up" on screen, in
+ * MediaPipe's image-normalized coordinates (x right, y down).
+ *
+ * Positive = the vector is tilted clockwise from vertical; negative =
+ * counterclockwise. Only x/y are used (z, depth, doesn't factor into an
+ * on-screen roll reading) — this deliberately ignores forward/backward tilt,
+ * which palm-orientation (facingCamera/facingAway) already covers.
+ */
+export function signedAngleFromVertical(v: { x: number; y: number }): number {
+  return (Math.atan2(v.x, -v.y) * 180) / Math.PI;
+}

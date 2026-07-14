@@ -48,6 +48,25 @@ export interface PalmAnalysis {
   issue?: PalmIssue;
 }
 
+/** Which way to rotate the wrist to correct an on-screen tilt. */
+export type RollDirection = "clockwise" | "counterclockwise";
+
+/**
+ * Roll of the hand about the forearm axis — i.e. how tilted it looks on
+ * screen, independent of palmOrientation's front/back facing check.
+ * Checked against "upright" (0deg) for every letter, since fingerspelling
+ * is conventionally signed with the hand vertical.
+ */
+export interface WristRollAnalysis {
+  /** Signed tilt from vertical in degrees. Positive = tilted clockwise. */
+  angle: number;
+  status: "correct" | "incorrect";
+  /** Present only when status is "incorrect". */
+  correctionDirection?: RollDirection;
+  /** Coarse severity used to phrase feedback ("slightly" vs a stronger nudge). */
+  magnitude?: "slightly" | "more";
+}
+
 /**
  * Part A output — the deterministic PoseAnalysisService result. Plain data,
  * safe to serialize and hand to an LLM, a UI component, or a test assertion.
@@ -56,7 +75,12 @@ export interface PoseAnalysisResult {
   letter: string;
   fingers: Record<FingerName, FingerAnalysis>;
   palm: PalmAnalysis;
-  /** True only when every finger is correct AND palm is correct-or-not-checked. */
+  wristRoll: WristRollAnalysis;
+  /**
+   * True only when every finger is correct AND palm is correct-or-not-checked.
+   * Deliberately does NOT factor in wristRoll — roll tolerance is generous
+   * and advisory only, so it doesn't gate the "isCorrect" verdict.
+   */
   isCorrect: boolean;
 }
 

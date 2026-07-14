@@ -1,4 +1,4 @@
-import type { FingerName, PoseAnalysisResult } from "../models/poseAnalysis";
+import type { FingerIssue, FingerName, PoseAnalysisResult } from "../models/poseAnalysis";
 import { FINGER_NAMES } from "../models/poseAnalysis";
 
 const FRIENDLY_FINGER: Record<FingerName, string> = {
@@ -8,6 +8,51 @@ const FRIENDLY_FINGER: Record<FingerName, string> = {
   ring: "your ring finger",
   pinky: "your pinky",
 };
+
+/** Short, capitalized label for structured (list-style) feedback lines. */
+const FINGER_LABEL: Record<FingerName, string> = {
+  thumb: "Thumb",
+  index: "Index finger",
+  middle: "Middle finger",
+  ring: "Ring finger",
+  pinky: "Pinky",
+};
+
+const ISSUE_LABEL: Record<FingerIssue, string> = {
+  too_straight: "too straight",
+  too_bent: "too bent",
+  partially_bent: "partially bent",
+};
+
+/**
+ * Builds one short, deterministic line per finger/palm/wrist check straight
+ * from Part A's structured result — e.g. "Thumb correct", "Index finger too
+ * bent", "Rotate wrist slightly clockwise". No model involved; pure
+ * string formatting over PoseAnalysisResult, safe to render as a checklist
+ * or read out one at a time.
+ */
+export function generateStructuredFeedback(result: PoseAnalysisResult): string[] {
+  const lines: string[] = [];
+
+  for (const finger of FINGER_NAMES) {
+    const info = result.fingers[finger];
+    const label = FINGER_LABEL[finger];
+    lines.push(info.status === "correct" ? `${label} correct` : `${label} ${ISSUE_LABEL[info.issue!]}`);
+  }
+
+  if (result.palm.status === "correct") {
+    lines.push("Palm orientation correct");
+  } else if (result.palm.status === "incorrect") {
+    const hint = result.palm.issue === "flip_toward_camera" ? "toward the camera" : "away from the camera";
+    lines.push(`Turn palm ${hint}`);
+  }
+
+  if (result.wristRoll.status === "incorrect") {
+    lines.push(`Rotate wrist ${result.wristRoll.magnitude} ${result.wristRoll.correctionDirection}`);
+  }
+
+  return lines;
+}
 
 /**
  * Builds simple, fixed-template feedback straight from Part A's structured

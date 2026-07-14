@@ -7,10 +7,12 @@ import type {
   PalmAnalysis,
   PalmIssue,
   PoseAnalysisResult,
+  RollDirection,
+  WristRollAnalysis,
 } from "../models/poseAnalysis";
 import { FINGER_NAMES } from "../models/poseAnalysis";
 import { ASL_ALPHABET_REFERENCE } from "../models/aslAlphabetReference";
-import { angleBetween, cross, mirrorHorizontally } from "../utils/handGeometry";
+import { angleBetween, cross, mirrorHorizontally, signedAngleFromVertical } from "../utils/handGeometry";
 
 /** Landmark indices per finger: [MCP, PIP, DIP, TIP]. Thumb has no DIP, so it reuses IP for both angle checks. */
 const FINGER_JOINTS: Record<FingerName, readonly [number, number, number, number]> = {
@@ -27,6 +29,11 @@ const CURLED_MAX_ANGLE = 95;
 
 /** Below this angleDiff (degrees) from the expected bucket's edge, we don't bother flagging it — avoids nagging over near-misses. */
 const ANGLE_DIFF_TOLERANCE = 8;
+
+/** Wrist roll (degrees from vertical) below this is considered upright — generous, since a slight natural tilt is normal. */
+const ROLL_TOLERANCE_DEGREES = 18;
+/** Beyond this, phrase the nudge as "more" rather than "slightly". */
+const ROLL_SIGNIFICANT_DEGREES = 40;
 
 function classifyExtension(angle: number): ExtensionState {
   if (angle >= EXTENDED_MIN_ANGLE) return "extended";
@@ -85,11 +92,12 @@ export class PoseAnalysisService {
     }
 
     const palm = PoseAnalysisService.analyzePalm(points, reference.palmOrientation);
+    const wristRoll = PoseAnalysisService.analyzeWristRoll(points);
 
     const isCorrect =
       FINGER_NAMES.every((f) => fingers[f].status === "correct") && palm.status !== "incorrect";
 
-    return { letter, fingers, palm, isCorrect };
+    return { letter, fingers, palm, wristRoll, isCorrect };
   }
 
   private static analyzeFinger(
@@ -159,5 +167,35 @@ export class PoseAnalysisService {
 
     const issue: PalmIssue = expected === "facingCamera" ? "flip_toward_camera" : "flip_away_from_camera";
     return { orientation, status: "incorrect", issue };
+  }
+
+  /**
+   * Estimates how tilted the hand looks on screen (roll about the forearm
+   * axis) and, if it's off enough to matter, which way to rotate the wrist
+   * to correct it — e.g. "rotate wrist slightly clockwise".
+   *
+   * Uses the wrist->middle-MCP vector as the hand's long axis: unlike
+   * fingertips, the MCP knuckles barely move as fingers curl, so this stays
+   * stable across every finger shape and isolates rotation specifically.
+   * Checked against upright (0deg) for every letter, since fingerspelling
+   * is conventionally signed with the hand vertical — this is a coarse,
+   * letter-independent heuristic, not tuned per letter.
+   */
+  private static analyzeWristRoll(landmarks: HandLandmarks): WristRollAnalysis {
+    const wrist = landmarks[0];
+    const middleMcp = landmarks[9];
+
+    const angle = signedAngleFromVertical({ x: middleMcp.x - wrist.x, y: middleMcp.y - wrist.y });
+    const rounded = Math.round(angle);
+
+    if (Math.abs(angle) <= ROLL_TOLERANCE_DEGREES) {
+      return { angle: rounded, status: "correct" };
+    }
+
+    // To straighten a clockwise tilt, rotate counterclockwise, and vice versa.
+    const correctionDirection: RollDirection = angle > 0 ? "counterclockwise" : "clockwise";
+    const magnitude: "slightly" | "more" = Math.abs(angle) >= ROLL_SIGNIFICANT_DEGREES ? "more" : "slightly";
+
+    return { angle: rounded, status: "incorrect", correctionDirection, magnitude };
   }
 }

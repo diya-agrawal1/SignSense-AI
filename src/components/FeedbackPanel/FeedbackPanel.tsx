@@ -8,6 +8,8 @@ export interface FeedbackPanelProps {
   feedback?: LessonFeedback;
   /** Part A's structured result (from usePoseFeedback) — renders per-finger chips when present. */
   poseAnalysis?: PoseAnalysisResult | null;
+  /** One line per check ("Thumb correct", "Rotate wrist slightly clockwise") — renders as a checklist when present. */
+  structuredFeedback?: string[];
   /** Part B's phrased sentence (template or LLM) — takes priority over `feedback.message` when present. */
   phrasedMessage?: string | null;
   /** True while the on-device LLM is generating a phrased upgrade of the current template message. */
@@ -35,6 +37,7 @@ const FINGER_LABEL: Record<FingerName, string> = {
 export function FeedbackPanel({
   feedback = DEFAULT_FEEDBACK,
   poseAnalysis,
+  structuredFeedback,
   phrasedMessage,
   isPhrasingLoading,
 }: FeedbackPanelProps) {
@@ -73,6 +76,25 @@ export function FeedbackPanel({
               Palm
             </li>
           )}
+          <li
+            className={styles.fingerChip}
+            data-status={poseAnalysis.wristRoll.status}
+            title={
+              poseAnalysis.wristRoll.status === "incorrect"
+                ? `Rotate ${poseAnalysis.wristRoll.magnitude} ${poseAnalysis.wristRoll.correctionDirection}`
+                : undefined
+            }
+          >
+            Wrist
+          </li>
+        </ul>
+      )}
+
+      {structuredFeedback && structuredFeedback.length > 0 && (
+        <ul className={styles.checklist}>
+          {structuredFeedback.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
         </ul>
       )}
     </section>

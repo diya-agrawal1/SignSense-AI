@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PoseAnalysisService } from "../services/PoseAnalysisService";
 import { LLMFeedbackService } from "../services/LLMFeedbackService";
-import { generateTemplateFeedback } from "../utils/templateFeedback";
+import { generateStructuredFeedback, generateTemplateFeedback } from "../utils/templateFeedback";
 import type { HandLandmarks, Handedness } from "../models/handTracking";
 import type { PoseAnalysisResult } from "../models/poseAnalysis";
 
@@ -10,6 +10,8 @@ export type FeedbackSource = "template" | "llm";
 interface UsePoseFeedbackResult {
   /** Part A's structured result — always available synchronously once a hand is tracked. Drives skeleton highlighting. */
   analysis: PoseAnalysisResult | null;
+  /** One line per finger/palm/wrist check, e.g. "Thumb correct", "Rotate wrist slightly clockwise". */
+  structuredFeedback: string[];
   /** Phrased feedback sentence — template instantly, upgraded to LLM phrasing when it resolves. */
   message: string | null;
   /** Which layer produced `message` right now. */
@@ -119,5 +121,7 @@ export function usePoseFeedback(
     };
   }, [analysis, isLLMAvailable]);
 
-  return { analysis, message, source, isPhrasingLoading, isLLMAvailable };
+  const structuredFeedback = useMemo(() => (analysis ? generateStructuredFeedback(analysis) : []), [analysis]);
+
+  return { analysis, structuredFeedback, message, source, isPhrasingLoading, isLLMAvailable };
 }
