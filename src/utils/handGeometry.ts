@@ -44,6 +44,16 @@ export function cross(
   };
 }
 
+/** Linear interpolation between two numbers. t=0 -> a, t=1 -> b. */
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Linear interpolation between two landmarks, component-wise. */
+export function lerpLandmark(a: NormalizedLandmark, b: NormalizedLandmark, t: number): NormalizedLandmark {
+  return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t) };
+}
+
 /**
  * Signed angle (degrees) of a 2D vector from "straight up" on screen, in
  * MediaPipe's image-normalized coordinates (x right, y down).

@@ -10,18 +10,10 @@ import type {
   RollDirection,
   WristRollAnalysis,
 } from "../models/poseAnalysis";
-import { FINGER_NAMES } from "../models/poseAnalysis";
+import { FINGER_JOINT_INDICES, FINGER_NAMES } from "../models/poseAnalysis";
 import { ASL_ALPHABET_REFERENCE } from "../models/aslAlphabetReference";
 import { angleBetween, cross, mirrorHorizontally, signedAngleFromVertical } from "../utils/handGeometry";
 
-/** Landmark indices per finger: [MCP, PIP, DIP, TIP]. Thumb has no DIP, so it reuses IP for both angle checks. */
-const FINGER_JOINTS: Record<FingerName, readonly [number, number, number, number]> = {
-  thumb: [1, 2, 3, 4], // CMC, MCP, IP, TIP
-  index: [5, 6, 7, 8],
-  middle: [9, 10, 11, 12],
-  ring: [13, 14, 15, 16],
-  pinky: [17, 18, 19, 20],
-};
 
 /** Joint-angle thresholds separating curled / halfCurled / extended, in degrees. Tune per finger if needed. */
 const EXTENDED_MIN_ANGLE = 155;
@@ -105,7 +97,7 @@ export class PoseAnalysisService {
     finger: FingerName,
     expected: ExtensionState
   ): FingerAnalysis {
-    const [mcpIdx, pipIdx, dipIdx, tipIdx] = FINGER_JOINTS[finger];
+    const [mcpIdx, pipIdx, dipIdx, tipIdx] = FINGER_JOINT_INDICES[finger];
     const mcp = landmarks[mcpIdx];
     const pip = landmarks[pipIdx];
     const dip = landmarks[dipIdx];
