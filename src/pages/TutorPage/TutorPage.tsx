@@ -15,7 +15,7 @@ import styles from "./TutorPage.module.css";
 const ASL_LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
 /**
- * Temporary target-letter picker. Stands in for real lesson selection
+ * Temporary target-letter picker. Stands in for real lesson selections
  * (Stage 9-11 territory: progress tracking + adaptive lesson engine aren't
  * built yet) so PoseAnalysisService/usePoseFeedback have a target to
  * compare against right now.
@@ -82,7 +82,7 @@ export function TutorPage() {
         <main className={styles.main}>
           <div className={styles.stage}>
             <Camera onReady={setVideo} />
-            <SkeletonCanvas landmarks={landmarks} fps={fps} />
+            <SkeletonCanvas landmarks={landmarks} poseAnalysis={analysis} fps={fps} />
           </div>
           <LetterPicker value={targetLetter} onChange={setTargetLetter} />
           <LessonPanel lesson={activeLesson} />
