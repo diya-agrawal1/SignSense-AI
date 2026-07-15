@@ -7,6 +7,16 @@ export interface ClassificationResult {
   confidence: number;
 }
 
+export interface RankedPrediction {
+  letter: string;
+  confidence: number;
+}
+
+export interface DetailedClassificationResult extends ClassificationResult {
+  /** All classes, sorted by confidence descending (the model's own softmax output — already sums to ~1). */
+  ranked: RankedPrediction[];
+}
+
 const MODEL_URL = "/models/asl-classifier/model.json";
 const LABELS_URL = "/models/asl-classifier/labels.json";
 
@@ -44,6 +54,18 @@ export class SignClassifierService {
 
   /** Classifies a single 63-value feature vector, returning the top predicted letter and its confidence. */
   async predict(features: FeatureVector): Promise<ClassificationResult> {
+    const { letter, confidence } = await this.predictDetailed(features);
+    return { letter, confidence };
+  }
+
+  /**
+   * Same as predict(), but also returns every class ranked by confidence.
+   * Intended for the debug overlay (top-5 predictions) — not on the hot
+   * path used by the normal lesson flow, so the extra sort cost doesn't
+   * matter, but it reuses the exact same forward pass so the numbers
+   * always agree with predict().
+   */
+  async predictDetailed(features: FeatureVector): Promise<DetailedClassificationResult> {
     const [model, labels] = await Promise.all([this.modelPromise, this.labelsPromise]);
 
     const probabilities = tf.tidy(() => {
@@ -63,14 +85,14 @@ export class SignClassifierService {
       return outputTensor.dataSync();
     });
 
-    let bestIndex = 0;
-    for (let i = 1; i < probabilities.length; i++) {
-      if (probabilities[i] > probabilities[bestIndex]) bestIndex = i;
-    }
+    const ranked: RankedPrediction[] = Array.from(probabilities)
+      .map((confidence, i) => ({ letter: labels[i], confidence }))
+      .sort((a, b) => b.confidence - a.confidence);
 
     return {
-      letter: labels[bestIndex],
-      confidence: probabilities[bestIndex],
+      letter: ranked[0].letter,
+      confidence: ranked[0].confidence,
+      ranked,
     };
   }
 

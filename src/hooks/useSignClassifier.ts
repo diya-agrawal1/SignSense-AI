@@ -1,13 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { SignClassifierService } from "../services/SignClassifierService";
+import type { ClassificationResult, DetailedClassificationResult, RankedPrediction } from "../services/SignClassifierService";
 import { LandmarkProcessor } from "../services/LandmarkProcessor";
+import type { FeatureVector } from "../models/landmarkProcessing";
 import type { HandLandmarks, Handedness } from "../models/handTracking";
+
+export interface SignClassifierDebugInfo {
+  /** Every letter the model considered, sorted by confidence descending. */
+  ranked: RankedPrediction[];
+  /** The exact 63-value vector fed into the model this run, post wrist-centering/scale/mirroring. */
+  features: FeatureVector;
+  /** Handedness used for this run's canonicalization (post handedness-inversion fix in HandTrackingService). */
+  handedness: Handedness | null;
+  /** Top prediction before the confidence threshold is applied (may differ from `letter` below it). */
+  rawTopLetter: string;
+  rawTopConfidence: number;
+}
 
 interface UseSignClassifierResult {
   letter: string | null;
   confidence: number | null;
   /** True once the model + labels have finished loading and predictions can run. */
   isModelReady: boolean;
+  /** Only populated when `debug` is true. Top-5 predictions, raw feature vector, etc. */
+  debugInfo: SignClassifierDebugInfo | null;
 }
 
 /**
@@ -24,6 +40,12 @@ const CONFIDENCE_THRESHOLD = 0.6;
  */
 const PREDICTION_INTERVAL_MS = 200;
 
+function isDetailedResult(
+  result: ClassificationResult | DetailedClassificationResult
+): result is DetailedClassificationResult {
+  return Array.isArray((result as DetailedClassificationResult).ranked);
+}
+
 /**
  * useSignClassifier
  *
@@ -33,13 +55,15 @@ const PREDICTION_INTERVAL_MS = 200;
  */
 export function useSignClassifier(
   landmarks: HandLandmarks | null,
-  handedness: Handedness | null
+  handedness: Handedness | null,
+  debug = false
 ): UseSignClassifierResult {
   const serviceRef = useRef<SignClassifierService | null>(null);
   const lastRunRef = useRef(0);
   const [letter, setLetter] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [isModelReady, setIsModelReady] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<SignClassifierDebugInfo | null>(null);
 
   useEffect(() => {
     const service = new SignClassifierService();
@@ -67,9 +91,13 @@ export function useSignClassifier(
     lastRunRef.current = now;
 
     const features = LandmarkProcessor.process(landmarks, handedness);
+    const service = serviceRef.current;
 
-    serviceRef.current
-      .predict(features)
+    const predictionPromise: Promise<ClassificationResult | DetailedClassificationResult> = debug
+      ? service.predictDetailed(features)
+      : service.predict(features);
+
+    predictionPromise
       .then((result) => {
         if (result.confidence >= CONFIDENCE_THRESHOLD) {
           setLetter(result.letter);
@@ -78,11 +106,23 @@ export function useSignClassifier(
           setLetter(null);
           setConfidence(null);
         }
+
+        if (debug && isDetailedResult(result)) {
+          setDebugInfo({
+            ranked: result.ranked,
+            features,
+            handedness,
+            rawTopLetter: result.letter,
+            rawTopConfidence: result.confidence,
+          });
+        } else if (!debug) {
+          setDebugInfo(null);
+        }
       })
       .catch((err: unknown) => {
         console.error("[useSignClassifier] prediction failed:", err);
       });
-  }, [landmarks, handedness, isModelReady]);
+  }, [landmarks, handedness, isModelReady, debug]);
 
-  return { letter, confidence, isModelReady };
+  return { letter, confidence, isModelReady, debugInfo };
 }

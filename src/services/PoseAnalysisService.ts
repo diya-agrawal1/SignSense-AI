@@ -17,7 +17,18 @@ import { angleBetween, cross, mirrorHorizontally, signedAngleFromVertical } from
 
 /** Joint-angle thresholds separating curled / halfCurled / extended, in degrees. Tune per finger if needed. */
 const EXTENDED_MIN_ANGLE = 155;
-const CURLED_MAX_ANGLE = 95;
+/**
+ * Raised from 95 -> 130. A real closed fist's averaged PIP/DIP angle
+ * (see angleBetween: 180 = straight, 0 = folded flat back on itself)
+ * almost never reaches 95 — fingers physically can't fold flat to 0,
+ * and MediaPipe's landmark model, unable to see fingertips hidden inside
+ * a fist, tends to estimate them as *less* curled than they really are,
+ * pushing the measured angle up further still. 95 demanded a curl few
+ * real hands (or MediaPipe's own estimates) ever produce, so genuinely
+ * closed fists — A, S, T, E, M, N — were routinely bucketed as
+ * "halfCurled" and told to curl more even when fully curled.
+ */
+const CURLED_MAX_ANGLE = 130;
 
 /** Beyond this angleDiff (degrees), a finger's matchPercent bottoms out at 0. */
 const MAX_ANGLE_DIFF_FOR_ZERO_SCORE = 90;
@@ -36,10 +47,20 @@ function classifyExtension(angle: number): ExtensionState {
   return "halfCurled";
 }
 
-/** Midpoint of the angle range a given bucket occupies — used to compute a signed diff for ranking severity. */
+/**
+ * Midpoint of the angle range a given bucket occupies — used to compute a
+ * signed diff for ranking severity. Previously hardcoded to the bucket's
+ * physical extreme (0 for curled, 180 for extended) rather than its actual
+ * reachable range, which meant even a finger correctly classified as
+ * "curled" could still score a near-zero matchPercent simply because real
+ * hands never reach 0 degrees. Deriving the center from the same
+ * thresholds classifyExtension() uses keeps scoring consistent with
+ * classification: a finger dead-center in its bucket now scores ~100,
+ * not near 0.
+ */
 function bucketCenter(state: ExtensionState): number {
-  if (state === "extended") return 180;
-  if (state === "curled") return 0;
+  if (state === "extended") return (EXTENDED_MIN_ANGLE + 180) / 2;
+  if (state === "curled") return CURLED_MAX_ANGLE / 2;
   return (EXTENDED_MIN_ANGLE + CURLED_MAX_ANGLE) / 2;
 }
 

@@ -153,11 +153,42 @@ export class HandTrackingService {
       landmarks: rawLandmarks
         ? rawLandmarks.map((lm) => ({ x: lm.x, y: lm.y, z: lm.z }))
         : null,
-      handedness: (handednessInfo?.label as Handedness | undefined) ?? null,
+      handedness: HandTrackingService.resolveHandedness(handednessInfo?.label),
       score: handednessInfo?.score ?? null,
       timestamp: performance.now(),
     };
 
     this.listeners.forEach((listener) => listener(result));
   };
+
+  /**
+   * MediaPipe's handedness classifier assumes the frame it receives is
+   * already mirrored — i.e. captured "selfie style" (see the "Note" in
+   * MediaPipe's Hands docs: "handedness is determined assuming the input
+   * image is mirrored... If it is not the case, please swap the
+   * handedness output in the application"). `selfieMode` is left unset
+   * here, and `hands.send({ image: videoElement })` in `loop()` above
+   * feeds the *raw* decoded video frame — the `scaleX(-1)` in
+   * Camera.module.css only flips the on-screen `<video>` element for the
+   * user's benefit; it has no effect on the underlying frame pixels
+   * MediaPipe samples. So the frame reaching MediaPipe is NOT mirrored,
+   * which means every label it returns is backwards relative to the
+   * user's actual hand: a user signing with their right hand gets "Left"
+   * back, and vice versa.
+   *
+   * This one-line swap corrects it at the source, so every downstream
+   * consumer (LandmarkProcessor's handedness canonicalization, and
+   * PoseAnalysisService's mirroring) sees the true hand. Left uncorrected,
+   * this silently mirrors every feature vector along the wrong axis before
+   * it ever reaches the classifier — especially damaging for signs like A
+   * and L, where the thumb's exact left/right position relative to the
+   * fist *is* the distinguishing feature: flipping it produces a shape the
+   * model never saw in training, tanking confidence or causing a
+   * misclassification, while shapes that don't depend so heavily on thumb
+   * laterality degrade far less visibly.
+   */
+  private static resolveHandedness(label: string | undefined): Handedness | null {
+    if (label !== "Left" && label !== "Right") return null;
+    return label === "Left" ? "Right" : "Left";
+  }
 }

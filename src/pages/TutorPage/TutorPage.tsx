@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "../../components/Sidebar";
 import { LessonPanel } from "../../components/LessonPanel";
 import { FeedbackPanel } from "../../components/FeedbackPanel";
+import { DebugPanel } from "../../components/DebugPanel";
 import { Camera } from "../../components/Camera";
 import { SkeletonCanvas } from "../../components/SkeletonCanvas";
 import { useHandTracking } from "../../hooks/useHandTracking";
@@ -99,8 +100,9 @@ function AccuracyThresholdControl({ value, onChange }: { value: number; onChange
 export function TutorPage() {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [accuracyThreshold, setAccuracyThreshold] = useAccuracyThreshold();
+  const [debugMode, setDebugMode] = useState(false);
   const { landmarks, fps, handedness } = useHandTracking(video);
-  const { letter, confidence, isModelReady } = useSignClassifier(landmarks, handedness);
+  const { letter, confidence, isModelReady, debugInfo } = useSignClassifier(landmarks, handedness, debugMode);
 
   const { prompt, advance } = useLessonEngine();
   const [targetLetter, setTargetLetter] = useState(prompt.letter);
@@ -179,6 +181,18 @@ export function TutorPage() {
         />
         {!isLLMAvailable && <p className={styles.llmNotice}>On-device phrasing unavailable - using simple wording.</p>}
         <AccuracyThresholdControl value={accuracyThreshold} onChange={setAccuracyThreshold} />
+
+        <button
+          type="button"
+          className={styles.debugToggle}
+          onClick={() => setDebugMode((v) => !v)}
+          aria-pressed={debugMode}
+        >
+          {debugMode ? "Hide" : "Show"} classifier debug info
+        </button>
+        {debugMode && (
+          <DebugPanel debugInfo={debugInfo} displayedLetter={letter} displayedConfidence={confidence} />
+        )}
       </div>
     </div>
   );
