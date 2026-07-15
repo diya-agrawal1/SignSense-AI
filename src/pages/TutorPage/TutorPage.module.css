@@ -44,18 +44,26 @@
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .letterButton:hover {
   border-color: var(--color-border-strong);
   color: var(--color-text-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.letterButton:active {
+  transform: translateY(0);
 }
 
 .letterButtonActive {
   background: var(--color-accent-amber-dim);
   border-color: var(--color-accent-amber);
   color: var(--color-accent-amber);
+  box-shadow: 0 0 0 1px var(--color-accent-amber);
 }
 
 .llmNotice {

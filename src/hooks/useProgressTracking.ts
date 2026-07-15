@@ -18,8 +18,11 @@ const HOLD_MS = 600;
  *     before ever holding a correct sign — recorded as an unsuccessful
  *     attempt so accuracy reflects real practice, not just wins
  *
- * Purely a side-effecting hook — nothing rendered, nothing returned. Mount
- * it once per active practice session (TutorPage).
+ * Purely a side-effecting hook — nothing rendered, nothing returned (aside
+ * from firing `onRoundComplete`, if provided, exactly once per round close —
+ * Stage 10's LessonEngine uses this to advance to its next suggested
+ * prompt right when a round actually finishes, rather than guessing).
+ * Mount it once per active practice session (TutorPage).
  *
  * Note: React StrictMode's dev-only mount→cleanup→mount cycle will record
  * one extra spurious "abandoned" round per letter change in development.
@@ -27,11 +30,17 @@ const HOLD_MS = 600;
  * production builds, but worth knowing if dev-mode numbers look slightly
  * inflated.
  */
-export function useProgressTracking(targetLetter: string | null, analysis: PoseAnalysisResult | null): void {
+export function useProgressTracking(
+  targetLetter: string | null,
+  analysis: PoseAnalysisResult | null,
+  onRoundComplete?: (letter: string, wasSuccess: boolean) => void
+): void {
   const currentLetterRef = useRef<string | null>(null);
   const roundStartRef = useRef<number>(0);
   const successLoggedRef = useRef(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onRoundCompleteRef = useRef(onRoundComplete);
+  onRoundCompleteRef.current = onRoundComplete;
 
   // Start a new round whenever the target letter changes. The round is
   // closed out in this same effect's cleanup — which React runs exactly
@@ -47,6 +56,7 @@ export function useProgressTracking(targetLetter: string | null, analysis: PoseA
       if (currentLetterRef.current && !successLoggedRef.current) {
         const durationMs = Date.now() - roundStartRef.current;
         ProgressService.recordRound(currentLetterRef.current, false, durationMs, null);
+        onRoundCompleteRef.current?.(currentLetterRef.current, false);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,6 +93,7 @@ export function useProgressTracking(targetLetter: string | null, analysis: PoseA
       const responseTimeMs = now - startedAt;
       ProgressService.recordRound(letter, true, responseTimeMs, responseTimeMs);
       successLoggedRef.current = true;
+      onRoundCompleteRef.current?.(letter, true);
     }, HOLD_MS);
 
     return () => {

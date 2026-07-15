@@ -24,7 +24,18 @@ export function Header({ title = "SignSense AI", activeView, onNavigate }: Heade
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <span className={styles.mark} aria-hidden="true" />
+        <span className={styles.mark} aria-hidden="true">
+          <svg className={styles.markIcon} viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+            <g fill="currentColor">
+              <rect x="10.9" y="15.7" width="10.2" height="9.3" rx="3.5" />
+              <rect x="15" y="14.4" width="4.2" height="2.2" rx="1.1" />
+              <rect x="12.2" y="2.9" width="3.2" height="12.5" rx="1.6" transform="rotate(-10 13.8 9.1)" />
+              <rect x="20.5" y="5.4" width="2.2" height="9.6" rx="1.1" transform="rotate(16 21.6 10.2)" />
+              <rect x="2.9" y="17.3" width="8" height="2.9" rx="1.4" transform="rotate(-20 6.9 18.7)" />
+            </g>
+          </svg>
+          <span className={styles.markPulse} />
+        </span>
         <h1 className={styles.title}>{title}</h1>
       </div>
 
