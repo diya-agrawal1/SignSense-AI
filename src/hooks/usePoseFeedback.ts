@@ -44,11 +44,14 @@ function fingerprint(result: PoseAnalysisResult): string {
 export function usePoseFeedback(
   landmarks: HandLandmarks | null,
   handedness: Handedness | null,
-  targetLetter: string | null
+  targetLetter: string | null,
+  /** Called once per held pose, as soon as it's been stable for STABILITY_MS — same debounce the LLM phrasing uses. Lets a caller (e.g. for progress tracking) log one attempt per hold instead of once per frame. */
+  onStableAttempt?: (result: PoseAnalysisResult) => void
 ): UsePoseFeedbackResult {
   const llmServiceRef = useRef<LLMFeedbackService | null>(null);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFingerprintRef = useRef<string | null>(null);
+  const lastAttemptFingerprintRef = useRef<string | null>(null);
 
   const [message, setMessage] = useState<string | null>(null);
   const [source, setSource] = useState<FeedbackSource>("template");
@@ -120,6 +123,29 @@ export function usePoseFeedback(
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
     };
   }, [analysis, isLLMAvailable]);
+
+  // Separate from the LLM-phrasing effect above so attempt reporting keeps
+  // working even when the on-device LLM is unavailable (isLLMAvailable is
+  // false). Uses the same STABILITY_MS debounce and fingerprint so a held
+  // pose is reported once, not once per frame.
+  const attemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!analysis || !onStableAttempt) return;
+
+    const fp = fingerprint(analysis);
+    if (fp === lastAttemptFingerprintRef.current) return;
+
+    if (attemptTimerRef.current) clearTimeout(attemptTimerRef.current);
+
+    attemptTimerRef.current = setTimeout(() => {
+      lastAttemptFingerprintRef.current = fp;
+      onStableAttempt(analysis);
+    }, STABILITY_MS);
+
+    return () => {
+      if (attemptTimerRef.current) clearTimeout(attemptTimerRef.current);
+    };
+  }, [analysis, onStableAttempt]);
 
   const structuredFeedback = useMemo(() => (analysis ? generateStructuredFeedback(analysis) : []), [analysis]);
 
