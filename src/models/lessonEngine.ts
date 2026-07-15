@@ -1,13 +1,12 @@
-import type { Lesson } from "./lesson";
+/** Difficulty tier for a letter or word — the adaptive engine's own vocabulary, no longer borrowed from the old placeholder Lesson type. */
+export type Difficulty = "beginner" | "intermediate" | "advanced";
 
-/** Reuses Lesson's difficulty union so LessonPanel needs no changes to render an engine-picked letter. */
-export type Difficulty = Lesson["difficulty"];
-
-/** Why the engine picked the letter it did — useful for UI copy ("Let's revisit..." vs "New letter!"). */
+/** Why the engine picked the letter it did — useful for UI copy ("Let's revisit...", "New letter!", or a learner's own manual pick). */
 export type NextLetterReason =
   | "weak_letter" // resurfacing a letter the learner has struggled with
   | "new_letter" // introducing a letter not attempted yet within the unlocked difficulty range
-  | "reinforce"; // everything unlocked has been tried and nothing counts as "weak" yet; keep circulating
+  | "reinforce" // everything unlocked has been tried and nothing counts as "weak" yet; keep circulating
+  | "manual"; // learner picked this letter directly, overriding the engine's pick
 
 export interface NextLetterResult {
   letter: string;

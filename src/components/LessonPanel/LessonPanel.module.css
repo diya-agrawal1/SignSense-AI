@@ -20,6 +20,13 @@
   font-size: var(--fs-xl);
 }
 
+.reason {
+  color: var(--color-accent-cyan);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
 .description {
   color: var(--color-text-secondary);
   font-size: var(--fs-sm);
