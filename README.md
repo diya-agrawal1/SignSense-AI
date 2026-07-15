@@ -1,107 +1,288 @@
-# 🤟 SignSense AI
-
-> An offline AI tutor that helps users learn ASL fingerspelling through real-time recognition and corrective feedback.
-
-Most people learning sign language rely on static images or videos and have no reliable way to check whether they're forming signs correctly. Existing AI-powered solutions often depend on cloud processing, raising privacy concerns and requiring a stable internet connection.
-
-**SignSense AI** provides a privacy-friendly alternative. Using only a device's camera, it recognizes ASL fingerspelling in real time, analyzes hand posture, and provides instant feedback—all entirely on-device, with no video ever leaving the user's browser.
-
-## 🎥 Demo
+# 🍕 SignSense AI
 
 <p align="center">
-  <img src="demo.gif" alt="SignSense AI Demo" width="800"/>
+  <h3 align="center">An Offline AI Tutor for Learning ASL Fingerspelling</h3>
+  <p align="center">
+    Privacy First • On-Device AI • React • TensorFlow.js • MediaPipe
+  </p>
 </p>
 
 ---
 
-## ✨ Features
+## 🍕 Overview
 
-* Real-time ASL fingerspelling recognition
-* On-device hand tracking using MediaPipe Hands
-* Lightweight local AI classifier
-* Instant corrective feedback for incorrect hand poses
-* Hand skeleton visualization
-* Confidence-based predictions
-* Fully offline inference
-* Privacy-first design with no cloud processing
+SignSense AI is a browser-based application that helps users learn **American Sign Language (ASL) fingerspelling** through real-time recognition and intelligent visual feedback.
+
+Unlike conventional sign language learning resources that rely on static images or cloud-based processing, SignSense AI performs the complete recognition pipeline **entirely on-device**. This enables low-latency predictions, offline accessibility, and complete privacy, as no camera frames are transmitted outside the user's device.
+
+The application combines **MediaPipe Hands** for real-time hand landmark detection with a **custom-trained lightweight MLP classifier** for ASL alphabet recognition.
 
 ---
 
-## 🧠 How It Works
+## 🍕 Problem Statement
 
-The application processes webcam input locally and converts hand movements into sign predictions.
+Learning ASL fingerspelling without an instructor is challenging because learners rarely receive immediate feedback on hand posture. Existing AI-powered solutions frequently rely on cloud inference, introducing privacy concerns and limiting usability in low-connectivity environments.
+
+SignSense AI addresses these challenges by providing a fully offline learning assistant capable of:
+
+- Detecting hand landmarks in real time
+- Recognizing ASL alphabet gestures
+- Providing pose-aware corrective feedback
+- Tracking learning progress locally
+- Running entirely on-device
+
+---
+
+## 🍕 Features
+
+- 📷 Real-time webcam integration
+- ✋ Live hand tracking using MediaPipe Hands
+- 🧠 Custom-trained ASL gesture classifier
+- 🎯 Recognition of ASL fingerspelling (A–Z)
+- 💡 Finger-level corrective feedback
+- 📈 Prediction confidence score
+- 🦴 Live hand skeleton visualization
+- 📊 Local progress tracking
+- 🔒 Complete on-device inference
+- 🌐 Offline-first architecture
+
+---
+
+## 🍕 System Architecture
 
 ```text
-Camera Feed
-      ↓
-MediaPipe Hands
-      ↓
-21 Hand Landmarks
-      ↓
-Landmark Normalization
-      ↓
-Local AI Classifier
-      ↓
-Predicted Letter
-      ↓
-Pose Analysis
-      ↓
-Real-Time Feedback
+                 Webcam
+                    │
+                    ▼
+            MediaPipe Hands
+        (21 Hand Landmarks)
+                    │
+                    ▼
+        Landmark Normalization
+                    │
+                    ▼
+     Custom MLP Gesture Classifier
+                    │
+                    ▼
+      Predicted Letter + Confidence
+             │                │
+             ▼                ▼
+      Pose Analysis     Progress Tracker
+             │
+             ▼
+      Feedback Generation
+             │
+             ▼
+      Interactive Learning UI
 ```
 
-### Hand Tracking
+---
 
-SignSense AI uses **MediaPipe Hands** to detect and track 21 hand landmarks in real time. These landmarks represent key joints and fingertip positions, providing a compact representation of the user's hand pose.
+## 🍕 AI Models
 
-### Letter Recognition
+### MediaPipe Hands
 
-The landmark coordinates are normalized and passed into a lightweight neural network running directly in the browser. The model predicts the most likely ASL letter and returns a confidence score.
+Responsible for:
 
-### Pose Analysis
+- Hand detection
+- 21-point landmark extraction
+- Real-time hand tracking
 
-Beyond classification, the system analyzes finger positions, joint angles, and overall hand orientation to identify mistakes in the user's pose. This allows the application to provide meaningful feedback instead of simply marking a sign as incorrect.
+Runs locally inside the browser using WebAssembly/WebGL.
+
+### Custom Gesture Classifier
+
+A lightweight **Multi-Layer Perceptron (MLP)** trained on normalized hand landmarks.
+
+| Property | Value |
+|----------|-------|
+| Input | 63 normalized values (21 × x, y, z) |
+| Output | 26 ASL alphabet classes |
+| Framework | TensorFlow.js |
+| Execution | Browser (On-Device) |
 
 ---
 
-## 🔒 Privacy & On-Device AI
+## 🍕 Model Performance
 
-Every part of the recognition pipeline runs locally on the user's device.
+| Metric | Value |
+|--------|------:|
+| Architecture | Multi-Layer Perceptron (MLP) |
+| Input Features | 63 |
+| Output Classes | 26 |
+| Average Inference Time | ~3–5 ms/frame* |
+| Target FPS | 30–60 FPS |
+| Model Size | < 1 MB |
+| Runtime | TensorFlow.js |
+| Execution | CPU (Browser) |
 
-* No video uploads
-* No cloud inference
-* No external processing
-* No internet connection required after loading the application
+> *Measured on a modern laptop. Actual performance depends on device specifications.
 
-This ensures low latency, improved privacy, and uninterrupted usage.
+### Performance Highlights
 
----
-
-## 🛠️ Tech Stack
-
-| Category         | Technology              |
-| ---------------- | ----------------------- |
-| Frontend         | React, Vite, TypeScript |
-| Computer Vision  | MediaPipe Hands         |
-| Machine Learning | TensorFlow.js           |
-| Visualization    | HTML5 Canvas            |
-| Storage          | LocalStorage            |
-| Deployment       | Vercel / Netlify        |
-
----
-
-## 🚀 Future Improvements
-
-* Adaptive learning based on user performance
-* Continuous word recognition
-* Progress tracking and analytics
-* Gamified learning challenges
-* Support for additional sign language datasets
-* Personalized lesson generation
+- ⚡ Lightweight browser inference
+- ⚡ Low-latency predictions
+- 🔒 No cloud processing
+- 📷 Camera frames never leave the device
+- 🌐 Works offline after loading
 
 ---
 
-## 👥 Team
+## 🍕 Tech Stack
 
-Built for the **On-Device AI** track with a focus on accessibility, privacy, and real-time learning.
+| Category | Technology |
+|----------|------------|
+| Frontend | React + Vite + TypeScript |
+| AI | MediaPipe Hands |
+| ML | TensorFlow.js |
+| Classifier | Custom MLP |
+| Visualization | HTML5 Canvas |
+| Browser APIs | getUserMedia |
+| Storage | LocalStorage |
+| Deployment | GitHub Pages / Vercel |
 
-If you're reading this and know sign language better than we do, we'd love your feedback 
+---
+
+## 🍕 Project Structure
+
+```text
+src/
+│
+├── components/
+├── hooks/
+├── models/
+├── pages/
+├── services/
+├── utils/
+└── App.tsx
+```
+
+---
+
+## 🍕 Installation
+
+### Clone the repository
+
+```bash
+git clone https://github.com/<your-username>/signsense-ai.git
+cd signsense-ai
+```
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Run locally
+
+```bash
+npm run dev
+```
+
+### Production build
+
+```bash
+npm run build
+npm run preview
+```
+
+---
+
+## 🍕 Usage
+
+1. Launch the application.
+2. Allow webcam permissions.
+3. Position your hand inside the frame.
+4. Follow the prompted ASL letter.
+5. View:
+   - Predicted letter
+   - Confidence score
+   - Skeleton overlay
+   - Corrective feedback
+6. Continue practicing while progress is stored locally.
+
+---
+
+## 🍕 Sample Input
+
+```text
+Prompt:
+Sign the letter G
+```
+
+### Expected Output
+
+```text
+Detected Letter : G
+
+Confidence : 97%
+
+✓ Thumb position correct
+✓ Middle finger correct
+✗ Index finger slightly bent
+
+Suggestion:
+Straighten your index finger slightly.
+```
+
+---
+
+## 🍕 Deployment
+
+The application can be deployed on **GitHub Pages** or **Vercel** since all inference is performed client-side.
+
+### GitHub Pages
+
+```bash
+npm run build
+npm run deploy
+```
+
+Repository:
+
+```
+https://github.com/<your-username>/signsense-ai
+```
+
+---
+
+## 🍕 Privacy
+
+Privacy is a core design principle.
+
+- No cloud inference
+- No video uploads
+- No external AI APIs
+- Local-only processing
+- Progress stored on the user's device
+
+---
+
+## 🍕 Future Work
+
+- Continuous word recognition
+- Adaptive lesson generation
+- Gamified practice mode
+- Daily streaks
+- Sign-to-text mode
+- Expanded sign dictionary
+- Mobile optimization
+
+---
+
+## 🍕 Team
+
+Built as a hackathon project exploring **On-Device AI** through computer vision, lightweight machine learning, and interactive education by Diya Agrawal, Pavani Agarwal, Swasti Garg.
+
+---
+
+## 🍕 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+<p align="center">
+Made with ❤️, ☕ and 🍕
+</p>
