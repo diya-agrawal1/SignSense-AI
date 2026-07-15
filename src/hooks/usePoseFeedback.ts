@@ -44,7 +44,8 @@ function fingerprint(result: PoseAnalysisResult): string {
 export function usePoseFeedback(
   landmarks: HandLandmarks | null,
   handedness: Handedness | null,
-  targetLetter: string | null
+  targetLetter: string | null,
+  accuracyThreshold?: number
 ): UsePoseFeedbackResult {
   const llmServiceRef = useRef<LLMFeedbackService | null>(null);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,12 +75,12 @@ export function usePoseFeedback(
   const analysis = useMemo<PoseAnalysisResult | null>(() => {
     if (!landmarks || !targetLetter) return null;
     try {
-      return PoseAnalysisService.analyze(landmarks, handedness, targetLetter);
+      return PoseAnalysisService.analyze(landmarks, handedness, targetLetter, accuracyThreshold);
     } catch (err) {
       console.error("[usePoseFeedback] pose analysis failed:", err);
       return null;
     }
-  }, [landmarks, handedness, targetLetter]);
+  }, [landmarks, handedness, targetLetter, accuracyThreshold]);
 
   useEffect(() => {
     if (!analysis) {

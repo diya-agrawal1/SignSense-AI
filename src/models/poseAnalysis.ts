@@ -37,14 +37,17 @@ export interface FingerAnalysis {
   angle: number;
   /** What the target letter expects for this finger. */
   expected: ExtensionState;
+  /** Whether matchPercent clears the user's accuracy threshold (see PoseAnalysisResult.accuracyPercent). */
   status: "correct" | "incorrect";
   issue?: FingerIssue;
   /**
-   * How far off the current angle is from the nearest edge of the expected
-   * bucket's range, in degrees. 0 when correct. Used to rank which finger
-   * issues matter most (e.g. for an LLM/UI to prioritize the worst offender).
+   * How far off the current angle is from the expected bucket's center, in
+   * degrees. Always computed (not just when incorrect) — it's the raw input
+   * to matchPercent below.
    */
   angleDiff: number;
+  /** 0-100 closeness to the expected shape for this finger alone. 100 = dead center of the expected bucket. */
+  matchPercent: number;
 }
 
 /**
@@ -91,9 +94,21 @@ export interface PoseAnalysisResult {
   palm: PalmAnalysis;
   wristRoll: WristRollAnalysis;
   /**
-   * True only when every finger is correct AND palm is correct-or-not-checked.
-   * Deliberately does NOT factor in wristRoll — roll tolerance is generous
-   * and advisory only, so it doesn't gate the "isCorrect" verdict.
+   * 0-100 overall closeness to the target letter's shape: the average of
+   * all 5 fingers' matchPercent, plus palm's (100 correct / 0 incorrect)
+   * when the letter has a checked orientation. Does NOT factor in
+   * wristRoll — roll tolerance is generous and advisory only.
+   */
+  accuracyPercent: number;
+  /** The sensitivity this result was judged against — see PoseAnalysisService.analyze's thresholdPercent param. */
+  accuracyThreshold: number;
+  /**
+   * True when accuracyPercent >= accuracyThreshold. Because this is judged
+   * on the OVERALL average, it's possible for isCorrect to be true while
+   * one individual finger's own status is "incorrect" (a strong match
+   * elsewhere can outweigh one weak finger) — that's intentional, not a
+   * bug: the accuracy threshold is a single adjustable sensitivity dial,
+   * not a require-every-finger-individually gate.
    */
   isCorrect: boolean;
 }

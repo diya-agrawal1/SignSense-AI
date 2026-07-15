@@ -49,6 +49,7 @@ export function FeedbackPanel({
       <div className={styles.headline}>
         <span className={styles.dot} data-status={status} aria-hidden="true" />
         <p className={styles.message}>{message}</p>
+        {poseAnalysis && <span className={styles.accuracyBadge}>{poseAnalysis.accuracyPercent}%</span>}
         {isPhrasingLoading && (
           <span className={styles.phrasingHint} aria-hidden="true">
             refining…

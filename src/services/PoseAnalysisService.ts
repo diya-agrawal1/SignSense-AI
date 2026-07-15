@@ -19,8 +19,11 @@ import { angleBetween, cross, mirrorHorizontally, signedAngleFromVertical } from
 const EXTENDED_MIN_ANGLE = 155;
 const CURLED_MAX_ANGLE = 95;
 
-/** Below this angleDiff (degrees) from the expected bucket's edge, we don't bother flagging it — avoids nagging over near-misses. */
-const ANGLE_DIFF_TOLERANCE = 8;
+/** Beyond this angleDiff (degrees), a finger's matchPercent bottoms out at 0. */
+const MAX_ANGLE_DIFF_FOR_ZERO_SCORE = 90;
+
+/** Default sensitivity when no threshold is supplied — matches the slider's default in useAccuracyThreshold. */
+const DEFAULT_ACCURACY_THRESHOLD = 80;
 
 /** Wrist roll (degrees from vertical) below this is considered upright — generous, since a slight natural tilt is normal. */
 const ROLL_TOLERANCE_DEGREES = 18;
@@ -48,6 +51,15 @@ function classifyFingerIssue(current: ExtensionState, expected: ExtensionState):
   return "partially_bent";
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** 100 at angleDiff=0, sliding to 0 at MAX_ANGLE_DIFF_FOR_ZERO_SCORE and beyond. */
+function matchPercentFromAngleDiff(angleDiff: number): number {
+  return Math.round(clamp(100 * (1 - angleDiff / MAX_ANGLE_DIFF_FOR_ZERO_SCORE), 0, 100));
+}
+
 /**
  * PoseAnalysisService
  *
@@ -62,11 +74,20 @@ function classifyFingerIssue(current: ExtensionState, expected: ExtensionState):
  * original per-point geometry.
  */
 export class PoseAnalysisService {
-  /** Runs the full comparison against a target letter and returns Part A's structured result. */
+  /**
+   * Runs the full comparison against a target letter and returns Part A's
+   * structured result.
+   *
+   * @param thresholdPercent user-adjustable sensitivity (0-100, default 80)
+   *   — how close (by accuracyPercent) counts as "correct". Lower = more
+   *   forgiving, higher = stricter. Applied uniformly to each finger's own
+   *   status and to the overall isCorrect verdict.
+   */
   static analyze(
     landmarks: HandLandmarks,
     handedness: Handedness | null,
-    targetLetter: string
+    targetLetter: string,
+    thresholdPercent: number = DEFAULT_ACCURACY_THRESHOLD
   ): PoseAnalysisResult {
     const letter = targetLetter.toUpperCase();
     const reference = ASL_ALPHABET_REFERENCE[letter];
@@ -80,22 +101,27 @@ export class PoseAnalysisService {
 
     const fingers = {} as Record<FingerName, FingerAnalysis>;
     for (const finger of FINGER_NAMES) {
-      fingers[finger] = PoseAnalysisService.analyzeFinger(points, finger, reference.fingers[finger]);
+      fingers[finger] = PoseAnalysisService.analyzeFinger(points, finger, reference.fingers[finger], thresholdPercent);
     }
 
     const palm = PoseAnalysisService.analyzePalm(points, reference.palmOrientation);
     const wristRoll = PoseAnalysisService.analyzeWristRoll(points);
 
-    const isCorrect =
-      FINGER_NAMES.every((f) => fingers[f].status === "correct") && palm.status !== "incorrect";
+    const fingerScores = FINGER_NAMES.map((f) => fingers[f].matchPercent);
+    const palmScore = palm.status === "not_checked" ? null : palm.status === "correct" ? 100 : 0;
+    const allScores = palmScore === null ? fingerScores : [...fingerScores, palmScore];
+    const accuracyPercent = Math.round(allScores.reduce((sum, s) => sum + s, 0) / allScores.length);
 
-    return { letter, fingers, palm, wristRoll, isCorrect };
+    const isCorrect = accuracyPercent >= thresholdPercent;
+
+    return { letter, fingers, palm, wristRoll, accuracyPercent, accuracyThreshold: thresholdPercent, isCorrect };
   }
 
   private static analyzeFinger(
     landmarks: HandLandmarks,
     finger: FingerName,
-    expected: ExtensionState
+    expected: ExtensionState,
+    thresholdPercent: number
   ): FingerAnalysis {
     const [mcpIdx, pipIdx, dipIdx, tipIdx] = FINGER_JOINT_INDICES[finger];
     const mcp = landmarks[mcpIdx];
@@ -112,9 +138,10 @@ export class PoseAnalysisService {
 
     const state = classifyExtension(angle);
     const angleDiff = Math.round(Math.abs(angle - bucketCenter(expected)));
+    const matchPercent = matchPercentFromAngleDiff(angleDiff);
 
-    if (state === expected || angleDiff <= ANGLE_DIFF_TOLERANCE) {
-      return { state, angle: Math.round(angle), expected, status: "correct", angleDiff: 0 };
+    if (matchPercent >= thresholdPercent) {
+      return { state, angle: Math.round(angle), expected, status: "correct", angleDiff, matchPercent };
     }
 
     return {
@@ -124,6 +151,7 @@ export class PoseAnalysisService {
       status: "incorrect",
       issue: classifyFingerIssue(state, expected),
       angleDiff,
+      matchPercent,
     };
   }
 
