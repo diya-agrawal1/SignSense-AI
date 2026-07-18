@@ -1,8 +1,10 @@
 # SignSense-AI — Technical Report: ASL Classifier Model
 
-**Scope:** covers the trained ASL alphabet classifier — model architecture, training/export pipeline, runtime performance (§1–§7), what runs on-device vs. requires internet (§8), accuracy evaluation against a real methodology and baseline (§9), privacy and safety considerations (§10), and full attribution of pretrained models/datasets/libraries used (§11). Complements `ARCHITECTURE.md`, which covers the full system.
+**Scope:** covers the trained ASL alphabet classifier — model architecture, runtime, and performance (§1–§7), privacy and safety considerations (§8), and full attribution of pretrained models/datasets/libraries used (§9), plus a summary of open gaps (§10). Two related topics are **not** in this file but live in sibling documents in this same project: what runs on-device vs. requires internet is covered in `local-ai-verification.md`, and accuracy evaluation against a real methodology and baseline is covered in `evaluation.md`. System-wide design lives in `architecture.md`.
 
-**A note on honesty of the numbers below:** every figure marked **[Measured]** was actually run and observed (either during training/export, or via a benchmark script run against the real exported model file — see §4). Every figure marked **[Not yet measured]** is a genuine gap — this report says so explicitly rather than presenting an estimate as fact, and gives the exact method to fill it in.
+**A note on honesty of the numbers below:** every figure marked **[Measured]** was actually run and observed, via a benchmark script run against the real exported model file (see §4). Every figure marked **[Not yet measured]** is a genuine gap — this report says so explicitly rather than presenting an estimate as fact, and gives the exact method to fill it in.
+
+**A note on the training pipeline:** this report describes the classifier that ships in `public/models/asl-classifier/` and was produced by an offline Python pipeline (landmark extraction from the training images → Keras training → quantized TF.js export). That pipeline's source scripts are **not included in this project bundle** — only their output (the three exported model files below) is present. Everything measured in this report was measured against those real exported files, so the numbers are trustworthy regardless; what's missing is the ability to regenerate the model from scratch or independently re-run training. If you have the original training scripts elsewhere, add them to the project for full reproducibility.
 
 ---
 
@@ -14,31 +16,32 @@
 | **Input** | 63-value normalized feature vector (21 MediaPipe hand landmarks × x/y/z, wrist-centered, scale-normalized, handedness-canonicalized — see `LandmarkProcessor.ts`) |
 | **Architecture** | `Dense(128, relu) → BatchNorm → Dropout(0.3) → Dense(64, relu) → Dropout(0.3) → Dense(24, softmax)` |
 | **Parameters** | 18,392 trainable + 256 non-trainable (BatchNorm running stats) = 18,648 total **[Measured — computed from layer shapes: (63×128+128) + 256 + (128×64+64) + (64×24+24)]** |
-| **Training framework** | TensorFlow / Keras 2.19–2.21 (Python), trained via `ml/train_model.py` |
-| **Training hardware** | CPU-only (no GPU used or required — the model is small enough that CPU training completed in minutes) |
+| **Training framework** | TensorFlow / Keras 2.19–2.21 (Python), trained offline — see the note above on the missing training scripts |
+| **Training hardware** | Unknown/not recorded — the model is small enough (~18.6K parameters) that it would train in minutes on CPU alone, but no record of the actual training run's hardware ships with this project |
 | **Deployment runtime** | TensorFlow.js, `tfjs_graph_model` format, run entirely client-side in the browser via `SignClassifierService.ts` |
-| **Detection front-end** | MediaPipe Hands (legacy `@mediapipe/hands` JS solution, loaded via `<script>` tag — see `ARCHITECTURE.md` §7 for why not a bundled import) |
+| **Detection front-end** | MediaPipe Hands (legacy `@mediapipe/hands` JS solution, loaded via a plain `<script>` tag rather than a bundled import — see the code comment at the top of `HandTrackingService.ts` for the reasoning, which concerns how that package's Closure-compiled build attaches itself to the global scope) |
 
 ---
 
 ## 2. Quantization and optimization techniques
 
-- **Post-training uint8 quantization**, applied at export time via `tensorflowjs_converter --quantize_uint8` (see `ml/export_tfjs.py`). Weights are stored as 8-bit integers with a per-tensor scale/zero-point, rather than 32-bit floats — roughly a 4x reduction in weight storage size, decompressed back to float32 at load time before inference.
-- **Architecture-level optimization, done before quantization even entered the picture:** the entire reason the model can stay this small is that `LandmarkProcessor` does the heavy lifting *before* the model ever sees data — stripping position, scale, and handedness variation out of the input. This is what makes a ~18K-parameter MLP sufficient at all, instead of needing a CNN operating on raw pixels (which would be orders of magnitude larger and slower).
+- **Post-training uint8 quantization.** Confirmed directly from `public/models/asl-classifier/model.json`'s `weightsManifest`: every weight tensor carries a `quantization: {dtype: "uint8", min, scale}` block. Weights are stored as 8-bit integers with a per-tensor scale/zero-point, rather than 32-bit floats — roughly a 4x reduction in weight storage size, decompressed back to float32 at load time before inference. (This was applied by the offline export step referenced in the note above, most likely via `tensorflowjs_converter --quantize_uint8`, though the exact export script isn't in this bundle to confirm the precise command.)
+- **Architecture-level optimization, done before quantization even entered the picture:** the entire reason the model can stay this small is that `LandmarkProcessor` does the heavy lifting *before* the model ever sees data — stripping position, scale, and handedness variation out of the input. This is what makes a ~18.6K-parameter MLP sufficient at all, instead of needing a CNN operating on raw pixels (which would be orders of magnitude larger and slower).
 - **No pruning, distillation, or architecture search was performed** — at this size, none were necessary to hit acceptable size/latency targets; noted here as a real gap, not an oversight to hide. If the model ever grows (e.g., if two-handed signs are added later), these become worth revisiting.
-- **Graph-mode export** (`tfjs_graph_model`, not `tfjs_layers_model`) — inference-only graph, no training-time nodes (dropout/batchnorm are folded into their inference behavior), which is both smaller and faster to execute than a layers-model would be.
+- **Graph-mode export** (`tfjs_graph_model`, not `tfjs_layers_model`, confirmed by `"format": "graph-model"` in `model.json`) — inference-only graph, no training-time nodes (dropout/batchnorm are folded into their inference behavior), which is both smaller and faster to execute than a layers-model would be.
 
 ---
 
 ## 3. Model size
 
-**[Measured]** — actual file sizes of the exported, quantized model:
+**[Measured]** — actual file sizes of the exported, quantized model in `public/models/asl-classifier/`:
 
 | File | Size |
 |---|---|
-| `model.json` (graph topology + quantization metadata) | 7,421 bytes |
+| `model.json` (graph topology + quantization metadata) | 7,406 bytes |
 | `group1-shard1of1.bin` (quantized weights) | 18,264 bytes |
-| **Total** | **25.1 KB** |
+| `labels.json` (the 24 class labels) | 170 bytes |
+| **Total (model + weights only)** | **25,670 bytes (25.06 KB)** |
 
 For scale: this is smaller than most single icons or small images on a typical webpage. It loads effectively instantly even on a slow connection, and — being same-origin static files served with the rest of the app bundle — is cached by the browser after first load like any other asset.
 
@@ -60,13 +63,13 @@ Benchmarked by loading the actual exported model file and running 500 real predi
 | Max (single outlier) | 41.75 ms |
 | Implied throughput (mean-based) | ~1,087 predictions/sec |
 
-**The caveat:** this was run in **Node.js, on TF.js's plain-JS `cpu` backend** (see §6) — not a browser, not WebGL/WASM. It's a legitimate lower-bound data point (proves the model itself is computationally trivial), but it is **not** the number a real user's browser will see. Two things will differ in an actual browser session:
+**The caveat:** this was run in **Node.js, on TF.js's plain-JS `cpu` backend** (see §5 for backend details) — not a browser, not WebGL/WASM. It's a legitimate lower-bound data point (proves the model itself is computationally trivial), but it is **not** the number a real user's browser will see. Two things will differ in an actual browser session:
 1. TF.js will typically select the **WebGL** backend in-browser (GPU-accelerated), which has real overhead per call (uploading tensors to a GPU texture, shader dispatch) that can actually make a *tiny* model like this one **slower** than plain CPU execution, purely from dispatch overhead — a known characteristic of GPU backends on very small workloads.
-2. `useSignClassifier.ts` already throttles to 5 predictions/sec, so raw max throughput isn't the relevant number in practice anyway — the model has a wide margin either way.
+2. `useSignClassifier.ts` already throttles to 5 predictions/sec (`PREDICTION_INTERVAL_MS = 200`, confirmed in that file), so raw max throughput isn't the relevant number in practice anyway — the model has a wide margin either way.
 
 **To measure the real number**, wrap the existing `predict()` call in `SignClassifierService.ts` with `performance.now()` (or use `tf.time()`, which reports both CPU and GPU-kernel time separately for the active backend) and log it in a dev build, then check on real target devices. This is flagged as the single most valuable next measurement to take before making any latency claims externally.
 
-**Context that matters more than the number in isolation:** MediaPipe Hands' own detection step (§5 of `ARCHITECTURE.md`) runs at roughly 27-32 FPS end-to-end in the app as already observed in manual testing — meaning hand detection alone budgets ~30ms/frame. Classification adds well under 1ms of that budget on any backend, based on the measurement above; it is not the bottleneck in this pipeline.
+**Context that matters more than the number in isolation:** MediaPipe Hands' own hand-detection step is, in general, the dominant per-frame cost in this kind of pipeline — informal manual observation during development suggested something in the neighborhood of 27–32 FPS end-to-end, though this specific number has not been logged or reproduced with a script and isn't independently confirmed anywhere in this project's files, so it should be treated as anecdotal rather than measured. What's solid is the comparison: classification adds well under 1ms of whatever per-frame budget hand detection uses, based on the measurement above, so it is not the bottleneck in this pipeline regardless of exactly what MediaPipe's own number turns out to be.
 
 ---
 
@@ -74,7 +77,7 @@ Benchmarked by loading the actual exported model file and running 500 real predi
 
 - **CPU:** MediaPipe Hands' WASM-based hand detection is the dominant CPU consumer in this pipeline — it runs a real neural network over every video frame. The classifier itself, per §4, is computationally negligible by comparison on any backend.
 - **GPU:** TF.js will use **WebGL** as its default backend in most browsers when available, dispatching the model's matrix multiplications as GPU shaders. MediaPipe Hands also uses WebGL for parts of its own pipeline (visible in the "Successfully created a WebGL context" log line seen during local testing). Both compete for the same GPU context — worth profiling together, not just the classifier in isolation, if GPU contention ever becomes a concern.
-- **NPU:** **Not used.** TensorFlow.js has no NPU/dedicated-AI-accelerator backend as of this project's dependencies — inference runs on CPU or GPU(WebGL/WASM) only. On devices with a real NPU (e.g., newer phones/laptops with dedicated AI silicon), this app is not taking advantage of it; that would require a different runtime (e.g., ONNX Runtime Web with NPU execution providers, or platform-specific APIs), which is out of scope for the current TF.js-based architecture.
+- **NPU:** **Not used.** TensorFlow.js has no NPU/dedicated-AI-accelerator backend as of this project's dependencies (`@tensorflow/tfjs` ^4.22.0) — inference runs on CPU or GPU (WebGL/WASM) only. On devices with a real NPU (e.g., newer phones/laptops with dedicated AI silicon), this app is not taking advantage of it; that would require a different runtime (e.g., ONNX Runtime Web with NPU execution providers, or platform-specific APIs), which is out of scope for the current TF.js-based architecture.
 - **Backend selection is automatic** and not currently pinned in code — `SignClassifierService.ts` uses whatever `tf.getBackend()` resolves to by default (typically `webgl`, falling back to `wasm` or `cpu` if WebGL is unavailable). **[Not yet measured]:** which backend actually gets selected on real target browsers/devices, and whether explicitly forcing a specific backend (`tf.setBackend('wasm')`, for instance) would be faster for a model this small — worth a controlled A/B measurement given the dispatch-overhead point in §4.
 
 ---
@@ -89,7 +92,7 @@ Benchmarked by loading the actual exported model file and running 500 real predi
 | After model load | 95.6 MB (**+2.0 MB**) |
 | After 500 inferences | 107.9 MB (**+12.4 MB** further) |
 
-The +12.4 MB climb over 500 calls reflects intermediate tensors awaiting garbage collection, not a leak — `tf.memory()` reported only 9 live tensors / ~73 KB of TF.js-managed memory at the end of the run, consistent with normal steady-state behavior once GC catches up (each `predict()` call in `SignClassifierService.ts` runs inside `tf.tidy()`, which is specifically what keeps this bounded rather than growing unbounded over a real session).
+The +12.4 MB climb over 500 calls reflects intermediate tensors awaiting garbage collection, not a leak — `tf.memory()` reported only 9 live tensors / ~73 KB of TF.js-managed memory at the end of the run, consistent with normal steady-state behavior once GC catches up (each `predict()` call in `SignClassifierService.ts` runs inside `tf.tidy()`, confirmed in source, which is specifically what keeps this bounded rather than growing unbounded over a real session).
 
 **What's genuinely not measured yet:** browser peak memory is a different question from Node's `process.memoryUsage()` — WebGL backends hold weights/activations in GPU texture memory, which doesn't show up in JS heap snapshots at all. **To measure it properly:** Chrome DevTools → Performance Monitor (for live JS heap + DOM node tracking) alongside `chrome://gpu` or the Memory tab's "GPU Memory" view, captured during an actual practice session (camera running + classification looping), on real target hardware. This is a concrete open item, not a claim being made here.
 
@@ -134,16 +137,16 @@ Recommended before any public claims about performance: run the same 500-inferen
 |---|---|
 | Camera video frames | Processed in-memory, frame by frame, by MediaPipe and the classifier — never written to disk, never stored in any variable beyond the current frame's processing, never transmitted anywhere. Once a frame is analyzed, it's discarded. |
 | Hand landmarks (per frame) | Same as above — transient, in-memory only, discarded after each frame's classification/feedback cycle. |
-| Practice statistics (attempts, successes, streaks per letter) | The one thing that *is* persisted — written to browser `localStorage` under a single key (`signsense.progress.v1`). This is the only data with any lifetime beyond a single frame. |
+| Practice statistics (attempts, successes, streaks per letter) | The one thing that *is* persisted — written to browser `localStorage` under a single key (`signsense.progress.v1`, per `ProgressService.ts`). This is the only data with any lifetime beyond a single frame. |
 | Feedback text (structured + LLM-phrased) | Generated and displayed, not stored or logged anywhere. |
 
-**No account system, no user identifiers, no analytics/telemetry calls exist in this codebase** (verified in §8's network-call audit) — there is no "user profile" beyond whatever `localStorage` on that one browser holds.
+**No account system, no user identifiers, no analytics/telemetry calls exist in this codebase.** This was verified by a dedicated network-call audit of the application's own source (searching for every `fetch`, `XMLHttpRequest`, `axios`, and hardcoded URL) — see `local-ai-verification.md` for the full methodology and results. There is no "user profile" beyond whatever `localStorage` on that one browser holds.
 
 ### 8.2 Permissions
 
 | Permission | Requested by | Purpose | User control |
 |---|---|---|---|
-| Camera (`getUserMedia`) | `Camera` component, on mount | Hand tracking — this is the only reason camera access is requested | Browser's native permission prompt; revocable anytime via browser site settings, which immediately stops the video stream |
+| Camera (`getUserMedia`) | `Camera` component, on mount (via `mediaDevicesService.ts`) | Hand tracking — this is the only reason camera access is requested | Browser's native permission prompt; revocable anytime via browser site settings, which immediately stops the video stream |
 | WebGPU | Not a permission prompt — a capability check (`'gpu' in navigator`) | Enables on-device LLM feedback phrasing (§8.1) | No user action needed; if unavailable, the app silently falls back to template-based feedback (`utils/templateFeedback.ts`) rather than failing |
 
 **No microphone, location, notifications, or any other browser permission is requested anywhere in the codebase.**
@@ -165,11 +168,11 @@ Recommended before any public claims about performance: run the same 500-inferen
 
 ### 8.5 Potential risks
 
-- **Bystanders in frame.** The camera captures whatever is in view, not just the signing hand — a face, other people, or background details could appear in the live video feed during use. Since frames are never stored or transmitted (§10.1), this is a momentary display-only exposure, not a retention risk — but it's still worth stating plainly rather than only discussing what happens to *processed* data.
-- **Bandwidth/data cost of first use.** The WebLLM model download (several hundred MB, §8.2) is a real, user-facing cost on a metered or slow connection, and nothing in the current UI warns the user before it starts downloading on first use of AI-phrased feedback.
-- **Third-party library trust.** MediaPipe, TensorFlow.js, and WebLLM are all external dependencies whose full internal behavior hasn't been independently audited beyond the network-call-level check in §8 — supply-chain trust in these libraries is inherent to using them at all, same as any project depending on external packages.
+- **Bystanders in frame.** The camera captures whatever is in view, not just the signing hand — a face, other people, or background details could appear in the live video feed during use. Since frames are never stored or transmitted (§8.1), this is a momentary display-only exposure, not a retention risk — but it's still worth stating plainly rather than only discussing what happens to *processed* data.
+- **Bandwidth/data cost of first use.** The WebLLM model download is a real, user-facing cost on a metered or slow connection — several hundred MB per `local-ai-verification.md`'s measurement — and nothing in the current UI warns the user before it starts downloading on first use of AI-phrased feedback.
+- **Third-party library trust.** MediaPipe, TensorFlow.js, and WebLLM are all external dependencies whose full internal behavior hasn't been independently audited beyond the network-call-level source check described in `local-ai-verification.md` — supply-chain trust in these libraries is inherent to using them at all, same as any project depending on external packages.
 - **Browser/extension-level exposure while camera is active.** While the camera permission is granted and the tab is active, any other script with legitimate page access (e.g. a browser extension with broad permissions) could theoretically access the same video stream — a general web-platform consideration, not something specific to a bug in this app's code.
-- **No content moderation on LLM output.** `LLMFeedbackService.ts`'s system prompt constrains the model's phrasing tightly (§8.1), but as with any LLM, there's no hard guarantee against an occasional malformed or off-tone response slipping through — low-stakes here given the narrow, encouraging-tutor use case, but worth naming as an open-ended risk category for any LLM-backed feature.
+- **No content moderation on LLM output.** `LLMFeedbackService.ts`'s system prompt constrains the model's phrasing tightly, but as with any LLM, there's no hard guarantee against an occasional malformed or off-tone response slipping through — low-stakes here given the narrow, encouraging-tutor use case, but worth naming as an open-ended risk category for any LLM-backed feature.
 
 ---
 
@@ -179,21 +182,21 @@ Recommended before any public claims about performance: run the same 500-inferen
 
 | Model | Publisher | Used for | License/terms |
 |---|---|---|---|
-| MediaPipe Hands (hand landmark detection) | Google | Real-time 21-point hand landmark detection, both in the browser (`@mediapipe/hands`) and during offline training-data extraction (Python `mediapipe` Tasks API) | Apache 2.0 |
-| Qwen2.5-0.5B-Instruct / Qwen2-0.5B-Instruct (primary candidates) | Alibaba (Qwen team), distributed via MLC-AI's prebuilt model catalog | On-device feedback phrasing (`LLMFeedbackService.ts`), selected automatically from `MODEL_CANDIDATES` based on availability | Qwen license (Apache 2.0 for the 2.5 series; verify the exact variant's license in MLC's model card before any redistribution) |
-| Llama-3.2-1B-Instruct (fallback candidate) | Meta, distributed via MLC-AI | Same as above, used only if the Qwen candidates aren't available in the installed WebLLM version | Llama 3.2 Community License (Meta) — has usage restrictions beyond a permissive open-source license; worth reviewing directly if this fallback is ever actually the one selected in production |
+| MediaPipe Hands (hand landmark detection) | Google | Real-time 21-point hand landmark detection in the browser (`@mediapipe/hands`) | Apache 2.0 |
+| Qwen2.5-0.5B-Instruct / Qwen2-0.5B-Instruct / Qwen2.5-1.5B-Instruct (in priority order) | Alibaba (Qwen team), distributed via MLC-AI's prebuilt model catalog | On-device feedback phrasing (`LLMFeedbackService.ts`), selected automatically from the `MODEL_CANDIDATES` array based on what's available in the installed WebLLM version | Qwen license (Apache 2.0 for the 2.5 series; verify the exact variant's license in MLC's model card before any redistribution) |
+| Llama-3.2-1B-Instruct (fallback candidate) | Meta, distributed via MLC-AI | Same as above, used only if none of the three Qwen candidates are available | Llama 3.2 Community License (Meta) — has usage restrictions beyond a permissive open-source license; worth reviewing directly if this fallback is ever actually the one selected in production |
 
-**This project trained its own model from scratch** (the 24-class ASL alphabet MLP classifier, §1–§3 of this report) — it is not a fine-tune or derivative of any pretrained sign-language model. The only pretrained models in the system are the two above, both used for input processing (hand landmarks) and output phrasing (feedback text), not for the sign classification task itself.
+**This project trained its own model from scratch** (the 24-class ASL alphabet MLP classifier, §1–§3 of this report) — it is not a fine-tune or derivative of any pretrained sign-language model. Note that MediaPipe Hands was also used offline during the training-data preparation step (to extract landmarks from training images), in addition to its browser use listed above — see the training-pipeline note at the top of this report for why that offline step isn't otherwise documented here in more detail.
 
 ### 9.2 Dataset
 
 | Dataset | Source | Used for | License |
 |---|---|---|---|
-| ASL Alphabet | [Kaggle, uploaded by grassknoted](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) — per the dataset's own description, compiled from multiple open datasets its author credits collectively | Training data for the ASL classifier (87,000 source images; 55,368 landmark vectors successfully extracted, §9.2) | **Not independently confirmed in this report** — the dataset's exact license terms should be verified directly on its Kaggle page before any redistribution, commercial use, or public release of this project, rather than assumed from this report alone. |
+| ASL Alphabet | [Kaggle, uploaded by grassknoted](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) — per the dataset's own description, compiled from multiple open datasets its author credits collectively | Training data for the ASL classifier (87,000 source images; 55,368 landmark vectors successfully extracted per `evaluation.md`) | **Not independently confirmed in this report** — the dataset's exact license terms should be verified directly on its Kaggle page before any redistribution, commercial use, or public release of this project, rather than assumed from this report alone. |
 
 ### 9.3 Libraries and frameworks
 
-**Browser app:**
+**Browser app** (from `package.json`):
 
 | Library | Version | Purpose |
 |---|---|---|
@@ -204,20 +207,8 @@ Recommended before any public claims about performance: run the same 500-inferen
 | `@tensorflow/tfjs` | ^4.22.0 | Classifier inference (browser) |
 | `@mlc-ai/web-llm` | ^0.2.79 | On-device LLM feedback phrasing |
 | oxlint | ^1.71.0 | Linting |
-| Vitest + Testing Library + jsdom | ^4.1.10 / ^16.3.2 / ^29.1.1 | Test tooling (added specifically to verify the LessonEngine integration's round-tracking logic, §10 of `ARCHITECTURE.md`'s development history) |
 
-**Python training pipeline** (`ml/`):
-
-| Library | Purpose |
-|---|---|
-| `mediapipe` | Landmark extraction from training images (Tasks API) |
-| `opencv-python-headless` | Image loading/preprocessing during extraction |
-| `tensorflow` / `keras` | Model definition and training |
-| `pandas` | Loading/manipulating the extracted landmark CSV |
-| `scikit-learn` | Train/val/test split, evaluation metrics |
-| `matplotlib` | Confusion matrix plotting |
-| `tqdm` | Extraction progress bars |
-| `tensorflowjs` | Converting the trained Keras model to browser-deployable TF.js format |
+**Offline training pipeline:** as noted at the top of this report, the Python scripts that produced the shipped model are not included in this project bundle, so their exact library list can't be confirmed from this repository alone. Based on the artifacts they produced (a Keras `Sequential` model, exported via TF.js's quantized graph-model converter, trained on MediaPipe-extracted landmarks), the pipeline almost certainly depended on `mediapipe`, `tensorflow`/`keras`, `scikit-learn` (for the train/val/test split and metrics reported in `evaluation.md`), and `tensorflowjs` (for the export step) — but this is an inference from the output artifacts, not a confirmed list, and should be replaced with the real `requirements.txt`/`pyproject.toml` if the training pipeline is added back to the project.
 
 ### 9.4 Browser platform APIs
 
@@ -225,7 +216,7 @@ Not third-party libraries, but worth listing as relied-upon platform capabilitie
 
 ### 9.5 Original work
 
-Everything else in the system — `LandmarkProcessor` (both TS and Python versions), `HandTrackingService`, `SignClassifierService`, `PoseAnalysisService`/`FingerAnalyzer`, `LessonEngine`, `ProgressService`, the training/extraction/export scripts, and all UI components — is original code written for this project, not adapted from a pre-existing template, tutorial, or third-party codebase.
+Everything else in the system — `LandmarkProcessor.ts`, `HandTrackingService.ts`, `SignClassifierService.ts`, `PoseAnalysisService.ts`, `LessonEngine.ts`, `ProgressService.ts`, `LLMFeedbackService.ts`, `mediaDevicesService.ts`, and all UI components/hooks/pages — is original code written for this project, not adapted from a pre-existing template, tutorial, or third-party codebase, as far as this report's source review found.
 
 ---
 
@@ -237,9 +228,10 @@ Collected in one place for visibility — these are the honest "not yet done" it
 2. Actual TF.js backend selected in real browsers/devices, and whether pinning a specific backend helps (§5).
 3. Real browser peak memory, including GPU texture memory (§6).
 4. Testing on any real end-user device across the matrix in §7 — everything so far ran in a headless sandbox.
-5. Independent verification that third-party libraries (MediaPipe, TF.js, WebLLM) send no telemetry of their own (§8.4) — a network capture, not just a source read.
-6. Formal real-world (live webcam) accuracy validation, beyond the Kaggle-dataset test-set number (§9.4).
-7. A real comparative baseline (another model/approach), not just the trivial random/majority baselines in §9.3.
-8. Evaluation of `PoseAnalysisService`, `LessonEngine`, and `LLMFeedbackService` individually (§9.5) — this report only evaluates the classifier.
-9. No in-app privacy disclosure currently shown to users before camera access (§10.4) — a real, addressable gap, not just a measurement one.
-10. Exact license terms for the Kaggle ASL Alphabet dataset and the specific WebLLM model variant actually selected in production (§11.1–§11.2) — stated as unconfirmed rather than assumed, and worth resolving before any public or commercial release.
+5. Independent verification that third-party libraries (MediaPipe, TF.js, WebLLM) send no telemetry of their own beyond a source-code read — see `local-ai-verification.md`'s own gaps section for the specifics (a real network capture, not just a source read, is still needed).
+6. Formal real-world (live webcam) accuracy validation, beyond the Kaggle-dataset test-set number — flagged directly in `evaluation.md`'s known-failure-cases section.
+7. A real comparative baseline (another model/approach), not just the trivial random/majority baselines computed in `evaluation.md`'s baseline-comparison section.
+8. Evaluation of `PoseAnalysisService`, `LessonEngine`, and `LLMFeedbackService` individually — `evaluation.md` explicitly scopes itself to the classifier only and lists these three as out of scope.
+9. No in-app privacy disclosure currently shown to users before camera access (§8.4) — a real, addressable gap, not just a measurement one.
+10. Exact license terms for the Kaggle ASL Alphabet dataset and the specific WebLLM model variant actually selected in production (§9.1–§9.2) — stated as unconfirmed rather than assumed, and worth resolving before any public or commercial release.
+11. **The offline training pipeline (landmark extraction → training → TF.js export) is not included in this project bundle** — only its output (the three files in `public/models/asl-classifier/`) is. This is a reproducibility gap: the app runs fine without it, but nobody can regenerate or independently audit the model's training process from this bundle alone. If the original scripts exist elsewhere, add them back for a complete submission.

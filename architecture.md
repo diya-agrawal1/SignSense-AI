@@ -2,6 +2,8 @@
 
 This document describes the technical architecture of **SignSense AI**, an offline AI-powered tutor for learning American Sign Language (ASL) fingerspelling.
 
+For deeper detail on the classifier model itself (parameters, quantization, latency, accuracy), see `TechnicalReport.md` and `evaluation.md`. For a full audit of what runs on-device vs. what touches the network, see `local-ai-verification.md`.
+
 ---
 
 # 🍕 High-Level Architecture
@@ -32,6 +34,8 @@ This document describes the technical architecture of **SignSense AI**, an offli
                      │
                      ▼
              Feedback Generation
+          (rule-based text, optionally
+           rephrased by an on-device LLM)
                      │
                      ▼
                React User Interface
@@ -41,14 +45,14 @@ This document describes the technical architecture of **SignSense AI**, an offli
 
 # 🍕 Architecture Overview
 
-The application is built around an **entirely client-side pipeline**. Every stage—from image acquisition to gesture recognition—runs locally inside the browser.
+The application is built around an **entirely client-side pipeline**. Every stage — from image acquisition to gesture recognition to feedback phrasing — runs locally inside the browser.
 
 There are **no backend APIs**, **no cloud inference**, and **no video uploads**.
 
 This architecture provides:
 
 - Low latency
-- Offline functionality
+- Offline functionality (after first load — see the caveat in `local-ai-verification.md` about the two one-time asset downloads)
 - Privacy-preserving inference
 - Cross-platform browser compatibility
 
@@ -60,7 +64,7 @@ This architecture provides:
 
 **Technology**
 
-- Browser `getUserMedia()` API
+- Browser `getUserMedia()` API, wrapped by `mediaDevicesService.ts` and the `Camera` component / `useCamera` hook
 
 ### Responsibilities
 
@@ -83,7 +87,7 @@ Live video stream
 
 **Technology**
 
-MediaPipe Hands
+MediaPipe Hands (`@mediapipe/hands`, loaded via `HandTrackingService.ts`)
 
 ### Responsibilities
 
@@ -111,12 +115,13 @@ These landmarks describe the position of every important finger joint.
 
 Raw landmark coordinates vary depending on camera distance and hand position.
 
-Before inference, they are normalized.
+Before inference, they are normalized by `LandmarkProcessor.ts`.
 
 ### Processing Steps
 
 - Wrist-centered translation
 - Scale normalization
+- Handedness canonicalization
 - Feature vector generation
 
 Output:
@@ -133,7 +138,7 @@ These normalized values become the input for the classifier.
 
 ## 4. Gesture Classification
 
-This is the project's primary AI model.
+This is the project's primary AI model, served by `SignClassifierService.ts`.
 
 ### Model
 
@@ -145,8 +150,8 @@ Lightweight Multi-Layer Perceptron (MLP)
 
 ### Output
 
-- Predicted ASL Letter
-- Confidence Score
+- Predicted ASL letter (one of 24 — A through Y, excluding J and Z, since both require motion a single static frame can't represent)
+- Confidence score
 
 Example
 
@@ -158,7 +163,7 @@ Letter : G
 Confidence : 97%
 ```
 
-The model executes locally using TensorFlow.js.
+The model executes locally using TensorFlow.js. See `TechnicalReport.md` for the model's exact architecture, size, and measured latency.
 
 ---
 
@@ -166,7 +171,7 @@ The model executes locally using TensorFlow.js.
 
 The predicted letter alone is not enough for learning.
 
-The pose analysis engine compares the detected hand pose against the expected pose for the target letter.
+`PoseAnalysisService.ts` compares the detected hand pose against the expected pose for the target letter.
 
 It evaluates:
 
@@ -194,7 +199,7 @@ Unlike the classifier, this module uses deterministic geometric calculations rat
 
 ## 6. Feedback Engine
 
-The feedback engine converts pose analysis into learner-friendly suggestions.
+The feedback engine converts pose analysis into learner-friendly suggestions, via `utils/templateFeedback.ts` (deterministic templates) and, when available, `LLMFeedbackService.ts` (on-device LLM rephrasing — see §8 below).
 
 Responsibilities include:
 
@@ -209,7 +214,7 @@ This component acts as the tutoring layer of the application.
 
 ## 7. Progress Tracking
 
-User progress is stored locally using browser storage.
+User progress is stored locally using browser `localStorage`, via `ProgressService.ts`.
 
 Tracked information includes:
 
@@ -227,17 +232,22 @@ Since everything is stored locally, no user information leaves the device.
 
 ```text
 App
-
-├── Header
-├── Sidebar
-├── Dashboard
-├── Camera
-├── SkeletonCanvas
-├── LessonPanel
-└── FeedbackPanel
+│
+├── pages/
+│   ├── DashboardPage
+│   └── TutorPage
+│
+└── components/
+    ├── Header
+    ├── Sidebar
+    ├── Camera
+    ├── SkeletonCanvas
+    ├── LessonPanel
+    ├── FeedbackPanel
+    └── DebugPanel
 ```
 
-Each component is responsible for a single feature, making the project modular and easy to maintain.
+Each component is responsible for a single feature, making the project modular and easy to maintain. `DashboardPage` and `TutorPage` are the two top-level pages; the rest are reusable components composed within them.
 
 ---
 
@@ -245,35 +255,64 @@ Each component is responsible for a single feature, making the project modular a
 
 ```text
 src/
-
-components/
 │
-├── Camera/
-├── Dashboard/
-├── FeedbackPanel/
-├── Header/
-├── LessonPanel/
-├── Sidebar/
-└── SkeletonCanvas/
-
-services/
+├── components/
+│   ├── Camera/
+│   ├── DebugPanel/
+│   ├── FeedbackPanel/
+│   ├── Header/
+│   ├── LessonPanel/
+│   ├── Sidebar/
+│   └── SkeletonCanvas/
 │
-├── HandTrackingService.ts
-├── LandmarkProcessor.ts
-├── ClassifierService.ts
-├── PoseAnalysisService.ts
-├── ProgressService.ts
-└── LessonEngine.ts
+├── pages/
+│   ├── DashboardPage/
+│   └── TutorPage/
+│
+├── services/
+│   ├── HandTrackingService.ts
+│   ├── LandmarkProcessor.ts
+│   ├── SignClassifierService.ts
+│   ├── PoseAnalysisService.ts
+│   ├── ProgressService.ts
+│   ├── LessonEngine.ts
+│   ├── LLMFeedbackService.ts
+│   └── mediaDevicesService.ts
+│
+├── hooks/
+│   ├── useAccuracyThreshold.ts
+│   ├── useCamera.ts
+│   ├── useHandTracking.ts
+│   ├── useLessonEngine.ts
+│   ├── usePoseFeedback.ts
+│   ├── useProgressTracking.ts
+│   └── useSignClassifier.ts
+│
+├── models/                    (TypeScript types/data, not the ML model files)
+│   ├── aslAlphabetReference.ts
+│   ├── camera.ts
+│   ├── handTracking.ts
+│   ├── landmarkProcessing.ts
+│   ├── lesson.ts
+│   ├── lessonEngine.ts
+│   ├── poseAnalysis.ts
+│   ├── progress.ts
+│   └── spellingWordList.ts
+│
+└── utils/
+    ├── classNames.ts
+    ├── handGeometry.ts
+    └── templateFeedback.ts
 
-models/
-└── gesture_model/
-
-hooks/
-
-pages/
-
-utils/
+public/
+└── models/
+    └── asl-classifier/        (the actual exported TF.js classifier — see below)
+        ├── model.json
+        ├── group1-shard1of1.bin
+        └── labels.json
 ```
+
+**Note on the two "models" folders:** `src/models/` holds ordinary TypeScript type definitions and static data (word lists, reference tables) — it is not where the trained classifier lives. The actual exported ASL classifier files live in `public/models/asl-classifier/`, served as static assets and loaded at runtime by `SignClassifierService.ts`. The offline Python pipeline that produced those three files (landmark extraction → training → export) is not included in this project bundle — see `TechnicalReport.md`'s training-pipeline note for details.
 
 ---
 
@@ -308,7 +347,7 @@ Pose Analysis
 
 ↓
 
-Feedback Engine
+Feedback Engine (template-based, or LLM-rephrased when WebGPU is available)
 
 ↓
 
@@ -319,9 +358,9 @@ React UI
 
 # 🍕 On-Device AI Pipeline
 
-The application uses two AI models.
+The application uses **three** AI models, all running entirely within the browser.
 
-## MediaPipe Hands
+## 1. MediaPipe Hands
 
 Purpose
 
@@ -332,9 +371,7 @@ Output
 
 21 hand landmarks
 
----
-
-## Custom Gesture Classifier
+## 2. Custom Gesture Classifier
 
 Purpose
 
@@ -346,9 +383,21 @@ Input
 
 Output
 
-26 alphabet classes
+24 alphabet classes (A–Y, excluding J and Z)
 
-Both models execute entirely within the browser.
+## 3. On-device LLM (feedback phrasing)
+
+Purpose
+
+Rewrite the deterministic pose-analysis feedback into more natural, encouraging tutor-style language.
+
+Technology
+
+WebLLM (`@mlc-ai/web-llm`) running via WebGPU, using a small instruction-tuned model (Qwen2.5-0.5B-Instruct or a listed fallback — see `TechnicalReport.md` §9.1 for the full candidate list).
+
+Fallback
+
+If WebGPU isn't available, or the model fails to load, feedback falls back to plain string templates (`utils/templateFeedback.ts`) rather than failing outright.
 
 ---
 
@@ -358,11 +407,13 @@ The system is optimized for real-time execution.
 
 Key design choices include:
 
-- Lightweight neural network
+- Lightweight neural network (~18.6K parameters, ~25 KB on disk — see `TechnicalReport.md` §1–§3)
 - Small feature vector (63 values)
 - Browser-native inference
-- No network latency
+- No network latency for the classifier or hand-tracking steps, once their one-time assets are cached
 - Efficient React rendering
+
+Actual measured latency, memory, and device-testing gaps are tracked in detail in `TechnicalReport.md` — this document only covers the design intent, not measured numbers.
 
 ---
 
@@ -377,7 +428,7 @@ The application never:
 - Uses external inference APIs
 - Stores personal information remotely
 
-All computation is performed locally on the user's device.
+All computation is performed locally on the user's device. See `local-ai-verification.md` for the detailed, source-level audit backing this claim, and `TechnicalReport.md` §8 for the fuller privacy/permissions/storage writeup.
 
 ---
 
@@ -394,11 +445,12 @@ Potential extensions include:
 - Sign-to-text mode
 - Voice-guided lessons
 - Mobile deployment using TensorFlow Lite
+- Restoring the offline training pipeline (landmark extraction, training, export scripts) to this project bundle for full reproducibility of the shipped classifier
 
 ---
 
 # 🍕 Summary
 
-SignSense AI follows a modular, offline-first architecture where every stage of the AI pipeline—from hand detection to gesture recognition and feedback—runs entirely within the browser.
+SignSense AI follows a modular, offline-first architecture where every stage of the AI pipeline — from hand detection to gesture recognition to feedback phrasing — runs entirely within the browser.
 
 This design provides a responsive user experience while preserving privacy, making it well suited for educational applications that require real-time interaction without cloud dependency.

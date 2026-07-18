@@ -13,9 +13,9 @@
 
 SignSense AI is a browser-based application that helps users learn **American Sign Language (ASL) fingerspelling** through real-time recognition and intelligent visual feedback.
 
-Unlike conventional sign language learning resources that rely on static images or cloud-based processing, SignSense AI performs the complete recognition pipeline **entirely on-device**. This enables low-latency predictions, offline accessibility, and complete privacy, as no camera frames are transmitted outside the user's device.
+Unlike conventional sign language learning resources that rely on static images or cloud-based processing, SignSense AI performs the complete recognition pipeline **entirely on-device**. This enables low-latency predictions, offline accessibility (after first load), and complete privacy, as no camera frames are transmitted outside the user's device.
 
-The application combines **MediaPipe Hands** for real-time hand landmark detection with a **custom-trained lightweight MLP classifier** for ASL alphabet recognition.
+The application combines **MediaPipe Hands** for real-time hand landmark detection, a **custom-trained lightweight MLP classifier** for ASL alphabet recognition, and an optional **on-device LLM** (via WebLLM/WebGPU) that rephrases feedback into more natural, encouraging tutor language.
 
 ---
 
@@ -38,13 +38,14 @@ SignSense AI addresses these challenges by providing a fully offline learning as
 - 📷 Real-time webcam integration
 - ✋ Live hand tracking using MediaPipe Hands
 - 🧠 Custom-trained ASL gesture classifier
-- 🎯 Recognition of ASL fingerspelling (A–Z)
+- 🎯 Recognition of ASL fingerspelling (A–Y, excluding J and Z — both require motion a single frame can't capture)
+- 💬 Optional on-device LLM feedback phrasing (WebLLM/WebGPU), with a template-based fallback when unavailable
 - 💡 Finger-level corrective feedback
 - 📈 Prediction confidence score
 - 🦴 Live hand skeleton visualization
 - 📊 Local progress tracking
 - 🔒 Complete on-device inference
-- 🌐 Offline-first architecture
+- 🌐 Offline-capable after first load
 
 ---
 
@@ -71,10 +72,13 @@ SignSense AI addresses these challenges by providing a fully offline learning as
              │
              ▼
       Feedback Generation
+   (template, or on-device LLM rephrasing)
              │
              ▼
       Interactive Learning UI
 ```
+
+See `architecture.md` for a full component-by-component breakdown.
 
 ---
 
@@ -97,9 +101,13 @@ A lightweight **Multi-Layer Perceptron (MLP)** trained on normalized hand landma
 | Property | Value |
 |----------|-------|
 | Input | 63 normalized values (21 × x, y, z) |
-| Output | 26 ASL alphabet classes |
+| Output | 24 ASL alphabet classes (A–Y, excluding J and Z) |
 | Framework | TensorFlow.js |
 | Execution | Browser (On-Device) |
+
+### On-device LLM (feedback phrasing)
+
+An optional third model: a small instruction-tuned LLM (Qwen2.5-0.5B-Instruct or a listed fallback — full candidate list in `TechnicalReport.md`), run entirely in-browser via **WebLLM** over **WebGPU**. It rewrites the deterministic pose-analysis output into more natural, encouraging feedback. If WebGPU isn't available, the app falls back to plain template-based feedback instead of failing.
 
 ---
 
@@ -109,22 +117,21 @@ A lightweight **Multi-Layer Perceptron (MLP)** trained on normalized hand landma
 |--------|------:|
 | Architecture | Multi-Layer Perceptron (MLP) |
 | Input Features | 63 |
-| Output Classes | 26 |
-| Average Inference Time | ~3–5 ms/frame* |
-| Target FPS | 30–60 FPS |
-| Model Size | < 1 MB |
+| Output Classes | 24 |
+| Model Size | ~25 KB (quantized) |
+| Test-set accuracy | 98.78% (see `evaluation.md`) |
 | Runtime | TensorFlow.js |
-| Execution | CPU (Browser) |
+| Execution | Browser (CPU/GPU via WebGL/WASM) |
 
-> *Measured on a modern laptop. Actual performance depends on device specifications.
+For inference latency: a Node.js/CPU benchmark against the real exported model measured a 0.92 ms mean inference time — but that number was **not** collected in an actual browser session, and browser latency depends heavily on which TF.js backend (WebGL/WASM/CPU) the browser selects. Real-browser latency has not yet been measured; see `TechnicalReport.md` §4 for the full benchmark, its caveats, and how to measure the real number. In practice, the app throttles classification to 5 predictions/second regardless, so raw throughput has a wide margin either way.
 
 ### Performance Highlights
 
-- ⚡ Lightweight browser inference
-- ⚡ Low-latency predictions
+- ⚡ Lightweight browser inference (~25 KB model)
+- ⚡ Low-latency predictions (hand detection is the bottleneck, not classification — see `TechnicalReport.md` §4)
 - 🔒 No cloud processing
 - 📷 Camera frames never leave the device
-- 🌐 Works offline after loading
+- 🌐 Works offline after the two one-time asset downloads described in `local-ai-verification.md`
 
 ---
 
@@ -133,13 +140,13 @@ A lightweight **Multi-Layer Perceptron (MLP)** trained on normalized hand landma
 | Category | Technology |
 |----------|------------|
 | Frontend | React + Vite + TypeScript |
-| AI | MediaPipe Hands |
-| ML | TensorFlow.js |
-| Classifier | Custom MLP |
+| Hand tracking | MediaPipe Hands |
+| Classifier | Custom MLP, TensorFlow.js |
+| Feedback LLM | WebLLM (`@mlc-ai/web-llm`) over WebGPU |
 | Visualization | HTML5 Canvas |
-| Browser APIs | getUserMedia |
-| Storage | LocalStorage |
-| Deployment | GitHub Pages / Vercel |
+| Browser APIs | `getUserMedia`, WebGPU, `localStorage` |
+| Storage | `localStorage` |
+| Deployment | GitHub Pages / Vercel (any static host — no backend required) |
 
 ---
 
@@ -150,12 +157,18 @@ src/
 │
 ├── components/
 ├── hooks/
-├── models/
+├── models/        (TypeScript types/data — NOT the trained ML model, see below)
 ├── pages/
 ├── services/
 ├── utils/
 └── App.tsx
+
+public/
+└── models/
+    └── asl-classifier/   (the actual trained, exported classifier files)
 ```
+
+See `architecture.md` for the full folder tree with every file listed.
 
 ---
 
@@ -230,7 +243,7 @@ Straighten your index finger slightly.
 
 ## 🍕 Deployment
 
-The application can be deployed on **GitHub Pages** or **Vercel** since all inference is performed client-side.
+The application can be deployed on **GitHub Pages** or **Vercel** since all inference is performed client-side — no backend or server-side model hosting is required.
 
 ### GitHub Pages
 
@@ -257,6 +270,23 @@ Privacy is a core design principle.
 - Local-only processing
 - Progress stored on the user's device
 
+See `local-ai-verification.md` for a source-level audit backing these claims, and `TechnicalReport.md` §8 for the full privacy/permissions/storage breakdown, including honestly-listed limitations (no cross-device sync, no in-app privacy notice yet, etc.).
+
+---
+
+## 🍕 Documentation
+
+This README covers the high-level pitch. For deeper detail:
+
+| Document | Covers |
+|---|---|
+| `architecture.md` | Full system design, component breakdown, folder structure |
+| `TechnicalReport.md` | Classifier architecture, quantization, measured latency/memory, privacy, attribution, and known gaps |
+| `evaluation.md` | Accuracy methodology, per-class results, baselines, known failure cases |
+| `local-ai-verification.md` | Source-level audit of exactly what runs on-device vs. what touches the network, and when |
+
+**Known gap:** the offline Python pipeline used to extract training landmarks, train the classifier, and export it to TensorFlow.js is not included in this repository — only the already-trained, already-exported model files (in `public/models/asl-classifier/`) are. The app runs and demos fully without it; what's missing is the ability to regenerate or independently audit the training process itself. See `TechnicalReport.md`'s training-pipeline note for details.
+
 ---
 
 ## 🍕 Future Work
@@ -268,6 +298,7 @@ Privacy is a core design principle.
 - Sign-to-text mode
 - Expanded sign dictionary
 - Mobile optimization
+- Restoring the offline training pipeline to this repository for full reproducibility
 
 ---
 

@@ -41,10 +41,10 @@ Per-class detail (precision / recall / F1 / support):
 
 ## 2. Benchmark method
 
-- **Data source:** 55,368 landmark feature vectors, extracted by `ml/extract_landmarks.py` (MediaPipe `HandLandmarker` Tasks API) from the [Kaggle ASL Alphabet dataset](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) (87,000 source images; the gap is images where no hand was detected).
-- **Split:** stratified 70/15/15 train/val/test via `sklearn.model_selection.train_test_split`, fixed `random_state=42` (reproducible).
-- **Held-out discipline:** validation accuracy (not test accuracy) drove early stopping and the LR schedule — the test set was touched exactly once, after training finished. This is what makes 98.78% a genuine generalization number, not an implicitly-tuned one.
-- **Metrics:** `sklearn.metrics.classification_report` and a confusion matrix (`ConfusionMatrixDisplay`, saved as `confusion_matrix.png`) — standard multi-class evaluation.
+- **Data source:** 55,368 landmark feature vectors, extracted from the [Kaggle ASL Alphabet dataset](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) (87,000 source images; the gap is images where no hand was detected) using MediaPipe's `HandLandmarker` Tasks API against the same normalization logic used by `LandmarkProcessor.ts` at inference time. **Note:** the specific extraction script used for this step is not included in the current project bundle — see the training-pipeline note in `TechnicalReport.md` for details on what's missing and why the numbers below are still trustworthy (they describe the resulting dataset and the trained model's behavior on it, independent of which script produced the CSV).
+- **Split:** stratified 70/15/15 train/val/test, fixed random seed for reproducibility (consistent with `sklearn.model_selection.train_test_split`'s standard usage, though the exact training script isn't in this bundle to confirm the precise call).
+- **Held-out discipline:** validation accuracy (not test accuracy) drove early stopping and the learning-rate schedule — the test set was touched exactly once, after training finished. This is what makes 98.78% a genuine generalization number, not an implicitly-tuned one. (This describes the stated training methodology; it isn't independently re-verifiable from this bundle alone without the original training script and logs.)
+- **Metrics:** a standard multi-class classification report (precision/recall/F1 per class) and a confusion matrix — standard multi-class evaluation practice.
 - **Ground truth:** the Kaggle dataset's own folder-name labels, not independently re-verified by a human rater — any source-dataset mislabeling carries through uncaught.
 
 ## 3. Baseline comparison
@@ -56,7 +56,7 @@ Computed directly from this evaluation's own test-set class distribution:
 | Random guess | 4.17% | 1 / 24 classes |
 | Majority-class ("always predict F") | 5.18% | 430 (F's test-set support) / 8,306 (total test-set size)¹ |
 
-¹ *Summing the individual per-letter support values in §9.1 gives 8,324, not 8,306 — a small discrepancy from transcribing the original training output; 8,306 is used since it's the total stated directly in the report's own accuracy row. Either way, the majority-class baseline lands at ~5%.*
+¹ *Summing the individual per-letter support values in §1 gives 8,324, not 8,306 — a small discrepancy, most likely from how the original training run's summary numbers were transcribed into this document; 8,306 is used since it's the total stated directly in this report's own headline-results row. Either way, the majority-class baseline lands at ~5%.*
 
 The model's 98.78% is **~19x the majority-class baseline** — large enough to be confident it's learning real hand-shape structure, not exploiting class imbalance. What's still missing: no comparison against another real hand-landmark ASL classifier (published or otherwise) — the trivial baselines confirm the model isn't degenerate, but don't establish how it stacks up against a CNN-on-raw-pixels approach or a published benchmark.
 
@@ -65,8 +65,8 @@ The model's 98.78% is **~19x the majority-class baseline** — large enough to b
 - **M and N are the weakest classes** (M: 0.94 precision, N: 0.94 recall) — not random noise: M and N are visually similar closed-fist handshapes in ASL, a documented source of confusion in ASL instruction generally.
 - **J and Z are not supported at all**, by design: both require motion, which a single static frame can't capture. Input resembling either gets forced into one of the 24 known classes, incorrectly.
 - **Real-world (live webcam) failure modes are not yet characterized.** Every number above comes from the Kaggle dataset's held-out test images — a fairly consistent image style. Live webcam input introduces variables the test set doesn't cover: real lighting, backgrounds, camera quality, distance, and skin tones/hand sizes not necessarily well-represented if the source dataset's demographic diversity is narrow (not independently audited).
-- **Single-hand assumption:** `maxNumHands: 1` — a second hand in frame (support hand, background person) is simply ignored, not formally evaluated.
-- **No systematic confusion-matrix deep dive beyond M/N** — `confusion_matrix.png` exists but a full off-diagonal read (which letters get confused with which, beyond the two flagged above) hasn't been written up.
+- **Single-hand assumption:** the hand-tracking configuration limits detection to one hand — a second hand in frame (support hand, background person) is simply ignored, not formally evaluated.
+- **No systematic confusion-matrix deep dive beyond M/N** — a full off-diagonal read (which letters get confused with which, beyond the two flagged above) hasn't been written up in this bundle.
 
 ## 5. What this evaluation does not cover
 
