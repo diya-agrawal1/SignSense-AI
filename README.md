@@ -105,11 +105,6 @@ A lightweight **Multi-Layer Perceptron (MLP)** trained on normalized hand landma
 | Framework | TensorFlow.js |
 | Execution | Browser (On-Device) |
 
-### On-device LLM (feedback phrasing)
-
-An optional third model: a small instruction-tuned LLM (Qwen2.5-0.5B-Instruct or a listed fallback — full candidate list in `TechnicalReport.md`), run entirely in-browser via **WebLLM** over **WebGPU**. It rewrites the deterministic pose-analysis output into more natural, encouraging feedback. If WebGPU isn't available, the app falls back to plain template-based feedback instead of failing.
-
----
 
 ## 🍕 Model Performance
 
@@ -119,11 +114,10 @@ An optional third model: a small instruction-tuned LLM (Qwen2.5-0.5B-Instruct or
 | Input Features | 63 |
 | Output Classes | 24 |
 | Model Size | ~25 KB (quantized) |
-| Test-set accuracy | 98.78% (see `evaluation.md`) |
+| Test-set accuracy | 98.78%  |
 | Runtime | TensorFlow.js |
 | Execution | Browser (CPU/GPU via WebGL/WASM) |
 
-For inference latency: a Node.js/CPU benchmark against the real exported model measured a 0.92 ms mean inference time — but that number was **not** collected in an actual browser session, and browser latency depends heavily on which TF.js backend (WebGL/WASM/CPU) the browser selects. Real-browser latency has not yet been measured; see `TechnicalReport.md` §4 for the full benchmark, its caveats, and how to measure the real number. In practice, the app throttles classification to 5 predictions/second regardless, so raw throughput has a wide margin either way.
 
 ### Performance Highlights
 
@@ -131,7 +125,7 @@ For inference latency: a Node.js/CPU benchmark against the real exported model m
 - ⚡ Low-latency predictions (hand detection is the bottleneck, not classification — see `TechnicalReport.md` §4)
 - 🔒 No cloud processing
 - 📷 Camera frames never leave the device
-- 🌐 Works offline after the two one-time asset downloads described in `local-ai-verification.md`
+- 🌐 Works offline after the two one-time asset downloads 
 
 ---
 
@@ -270,22 +264,6 @@ Privacy is a core design principle.
 - Local-only processing
 - Progress stored on the user's device
 
-See `local-ai-verification.md` for a source-level audit backing these claims, and `TechnicalReport.md` §8 for the full privacy/permissions/storage breakdown, including honestly-listed limitations (no cross-device sync, no in-app privacy notice yet, etc.).
-
----
-
-## 🍕 Documentation
-
-This README covers the high-level pitch. For deeper detail:
-
-| Document | Covers |
-|---|---|
-| `architecture.md` | Full system design, component breakdown, folder structure |
-| `TechnicalReport.md` | Classifier architecture, quantization, measured latency/memory, privacy, attribution, and known gaps |
-| `evaluation.md` | Accuracy methodology, per-class results, baselines, known failure cases |
-| `local-ai-verification.md` | Source-level audit of exactly what runs on-device vs. what touches the network, and when |
-
-**Known gap:** the offline Python pipeline used to extract training landmarks, train the classifier, and export it to TensorFlow.js is not included in this repository — only the already-trained, already-exported model files (in `public/models/asl-classifier/`) are. The app runs and demos fully without it; what's missing is the ability to regenerate or independently audit the training process itself. See `TechnicalReport.md`'s training-pipeline note for details.
 
 ---
 

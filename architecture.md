@@ -2,8 +2,6 @@
 
 This document describes the technical architecture of **SignSense AI**, an offline AI-powered tutor for learning American Sign Language (ASL) fingerspelling.
 
-For deeper detail on the classifier model itself (parameters, quantization, latency, accuracy), see `TechnicalReport.md` and `evaluation.md`. For a full audit of what runs on-device vs. what touches the network, see `local-ai-verification.md`.
-
 ---
 
 # 🍕 High-Level Architecture
@@ -52,7 +50,7 @@ There are **no backend APIs**, **no cloud inference**, and **no video uploads**.
 This architecture provides:
 
 - Low latency
-- Offline functionality (after first load — see the caveat in `local-ai-verification.md` about the two one-time asset downloads)
+- Offline functionality (after first load)
 - Privacy-preserving inference
 - Cross-platform browser compatibility
 
@@ -162,8 +160,6 @@ Letter : G
 
 Confidence : 97%
 ```
-
-The model executes locally using TensorFlow.js. See `TechnicalReport.md` for the model's exact architecture, size, and measured latency.
 
 ---
 
@@ -312,7 +308,7 @@ public/
         └── labels.json
 ```
 
-**Note on the two "models" folders:** `src/models/` holds ordinary TypeScript type definitions and static data (word lists, reference tables) — it is not where the trained classifier lives. The actual exported ASL classifier files live in `public/models/asl-classifier/`, served as static assets and loaded at runtime by `SignClassifierService.ts`. The offline Python pipeline that produced those three files (landmark extraction → training → export) is not included in this project bundle — see `TechnicalReport.md`'s training-pipeline note for details.
+**Note on the two "models" folders:** `src/models/` holds ordinary TypeScript type definitions and static data (word lists, reference tables) — it is not where the trained classifier lives. The actual exported ASL classifier files live in `public/models/asl-classifier/`, served as static assets and loaded at runtime by `SignClassifierService.ts`. The offline Python pipeline that produced those three files (landmark extraction → training → export) is not included in this project bundle.
 
 ---
 
@@ -353,82 +349,6 @@ Feedback Engine (template-based, or LLM-rephrased when WebGPU is available)
 
 React UI
 ```
-
----
-
-# 🍕 On-Device AI Pipeline
-
-The application uses **three** AI models, all running entirely within the browser.
-
-## 1. MediaPipe Hands
-
-Purpose
-
-- Hand detection
-- Landmark estimation
-
-Output
-
-21 hand landmarks
-
-## 2. Custom Gesture Classifier
-
-Purpose
-
-Recognize ASL alphabet gestures.
-
-Input
-
-63 normalized values
-
-Output
-
-24 alphabet classes (A–Y, excluding J and Z)
-
-## 3. On-device LLM (feedback phrasing)
-
-Purpose
-
-Rewrite the deterministic pose-analysis feedback into more natural, encouraging tutor-style language.
-
-Technology
-
-WebLLM (`@mlc-ai/web-llm`) running via WebGPU, using a small instruction-tuned model (Qwen2.5-0.5B-Instruct or a listed fallback — see `TechnicalReport.md` §9.1 for the full candidate list).
-
-Fallback
-
-If WebGPU isn't available, or the model fails to load, feedback falls back to plain string templates (`utils/templateFeedback.ts`) rather than failing outright.
-
----
-
-# 🍕 Performance Considerations
-
-The system is optimized for real-time execution.
-
-Key design choices include:
-
-- Lightweight neural network (~18.6K parameters, ~25 KB on disk — see `TechnicalReport.md` §1–§3)
-- Small feature vector (63 values)
-- Browser-native inference
-- No network latency for the classifier or hand-tracking steps, once their one-time assets are cached
-- Efficient React rendering
-
-Actual measured latency, memory, and device-testing gaps are tracked in detail in `TechnicalReport.md` — this document only covers the design intent, not measured numbers.
-
----
-
-# 🍕 Privacy & Security
-
-Privacy is central to the system architecture.
-
-The application never:
-
-- Uploads camera frames
-- Sends user gestures to a server
-- Uses external inference APIs
-- Stores personal information remotely
-
-All computation is performed locally on the user's device. See `local-ai-verification.md` for the detailed, source-level audit backing this claim, and `TechnicalReport.md` §8 for the fuller privacy/permissions/storage writeup.
 
 ---
 
